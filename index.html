@@ -533,8 +533,9 @@ function buildSummary() {
   const tc = card(p4, [40, 190, 1480, 860], 0);
   const sc = h('div', 'scroll', tc);
   const rows = S.companies;
-  sc.innerHTML = `<table class="tbl"><thead><tr><th>承攬廠商</th><th style="width:220px;text-align:right">缺失項次總數</th><th style="width:640px">缺失項目（項次）</th></tr></thead><tbody>${
-    [...rows].sort((a, b) => b[1] - a[1]).map(r => `<tr><td>${esc(r[0])}</td><td class="num">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('')}</tbody></table>`;
+  const withDate = rows.some(r => r.length > 3);
+  sc.innerHTML = `<table class="tbl"><thead><tr>${withDate ? '<th style="width:170px">日期</th>' : ''}<th>承攬廠商</th><th style="width:220px;text-align:right">缺失項次總數</th><th style="width:600px">缺失項目（項次）</th></tr></thead><tbody>${
+    [...rows].sort((a, b) => b[1] - a[1]).map(r => `<tr>${withDate ? `<td>${esc(r[3] || '')}</td>` : ''}<td>${esc(r[0])}</td><td class="num">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('')}</tbody></table>`;
   tabs.push('缺失五項以上公司');
   }
   makeTabs('s', tabs);

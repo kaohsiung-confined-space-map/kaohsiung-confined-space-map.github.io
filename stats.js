@@ -8,8 +8,8 @@
      以數字格式儲存的格子：小數部分為「1」者（如 2.1）可能原為 2.10，列為錯誤；其餘照數字讀。
    - 違規分級（以不重複項次數計）：5 項以上／小於 5 項（1～4）／無違規。
    - 違規公司分布：假日有違規場次／非假日有違規場次／無違規場次。
-   - 缺失五項以上公司：依承攬廠商合併；缺失項次總數 = 各場次缺失項次的「不重複」數；
-     列入條件見 COMPANY_RULE。
+   - 缺失五項以上公司：單一場次缺失 ≥5 項（含 5 項）才列入，不同場次不累計；
+     每個符合的場次各列一列（同一家公司有多場就列多列），欄位：承攬廠商、缺失項次總數、缺失項目、日期。
    - 是否偏遠、局限空間類型：各區頁面與全區總覽都統計。 */
 (function (root) {
   'use strict';
@@ -31,8 +31,6 @@
     industry: ['水、電、燃氣業', '製造業', '化學工業', '環境衛生服務業', '建築營造', '電信業', '食品加工業', '下水道工程業', '其他政府機關'],
     type: ['缺氧作業', '局限空間'],
   };
-  // 「缺失五項以上公司」列入條件：'visit' = 該公司至少有一場次缺失 ≥5 項；'union' = 合併後不重複項次 ≥5
-  const COMPANY_RULE = 'visit';
   const MAX_ITEM = 16;
 
   const norm = s => String(s ?? '').replace(/　/g, ' ').trim();
@@ -209,15 +207,9 @@
 
     const itemCount = zero(['無', ...Array.from({ length: MAX_ITEM }, (_, i) => `第${i + 1}項`)]);
     for (const r of rows) { if (!r.items.length) itemCount['無']++; for (const n of r.items) itemCount[`第${n}項`]++; }
-    const byCo = new Map();
-    for (const r of rows) {
-      if (!byCo.has(r.company)) byCo.set(r.company, { items: new Set(), maxVisit: 0 });
-      const c = byCo.get(r.company); r.items.forEach(n => c.items.add(n)); c.maxVisit = Math.max(c.maxVisit, r.items.length);
-    }
-    const companies = [...byCo.entries()]
-      .filter(([, c]) => COMPANY_RULE === 'visit' ? c.maxVisit >= 5 : c.items.size >= 5)
-      .map(([name, c]) => [name, c.items.size, [...c.items].sort((a, b) => a - b).join('、')])
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
+    const companies = rows.filter(r => r.items.length >= 5)
+      .map(r => [r.company, r.items.length, r.items.join('、'), `${r.date.y}-${pad(r.date.m)}-${pad(r.date.d)}`])
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant') || a[3].localeCompare(b[3]));
 
     const data = {
       year: roc, source: 'upload', generated: new Date().toISOString(), rows: rows.length,
@@ -227,6 +219,6 @@
     return { errors, warnings, notes, rows: rows.length, data };
   }
 
-  const api = { analyze, parseItems, COMPANY_RULE };
+  const api = { analyze, parseItems };
   if (typeof module !== 'undefined') module.exports = api; else root.MapStats = api;
 })(typeof window !== 'undefined' ? window : globalThis);
