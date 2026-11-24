@@ -3,18 +3,20 @@
    - 只讀「精準輔導」工作表；宣導場次不讀。個資欄位（聯絡人、執行人、工程聯絡人、缺失內容…）一律不讀。
    - 一列 = 一場次。總場次 = 該區列數。
    - 是否假日：以 Excel 欄位為準（只接受「假日／非假日」）；另與政府辦公日曆表比對，不一致只提醒、不修改。
-   - 缺失項目：連續數字為一個項次，其他符號（空白 . 、 。 ， 等）只是分隔；「無」= 無違規。
+   - 缺失項目：連續數字為一個項次，其他符號（空白 . 、 。 ， 等）只是分隔；「無」或「0」= 無違規。
      項次需在 1～16；同格重複的項次只算一次。空白或無法判讀的格子是錯誤。
      以數字格式儲存的格子：小數部分為「1」者（如 2.1）可能原為 2.10，列為錯誤；其餘照數字讀。
    - 違規分級（以不重複項次數計）：5 項以上／小於 5 項（1～4）／無違規。
    - 違規公司分布：假日有違規場次／非假日有違規場次／無違規場次。
    - 缺失五項以上公司：單一場次缺失 ≥5 項（含 5 項）才列入，不同場次不累計；
      每個符合的場次各列一列（同一家公司有多場就列多列），欄位：承攬廠商、缺失項次總數、缺失項目、日期。
-   - 是否偏遠、局限空間類型：各區頁面與全區總覽都統計。 */
+   - 局限空間類型：各區頁面與全區總覽都統計。
+   - 是否偏遠：115 年起才統計；115 年以前的年度不讀這一欄（就算 Excel 有這一欄也不讀）。 */
 (function (root) {
   'use strict';
 
   const SHEET = '精準輔導';
+  const REMOTE_FROM = 115;  // 是否偏遠從 115 年起才統計
   const COLS = [            // [代號, 表頭判斷, 顯示名稱]
     ['date', h => h === '日期', '日期'],
     ['company', h => h === '承攬廠商', '承攬廠商'],
@@ -64,6 +66,7 @@
     if (!c || (c.t === 's' && norm(c.v) === '')) return { error: '缺失項目空白（無違規請填「無」）' };
     if (c.t === 'n') {
       const raw = String(c.raw).trim();
+      if (/^0+(\.0+)?$/.test(raw)) return { items: [], none: true };      // 0 = 無缺失
       if (!/^\d+(\.\d+)?$/.test(raw)) return { error: `無法判讀的數字「${raw}」` };
       const [a, b] = raw.split('.');
       if (b !== undefined && b.length > 2) return { error: `無法判讀的數字「${raw}」，請把此欄改成文字格式後重新輸入` };
@@ -74,7 +77,7 @@
     }
     if (c.t !== 's') return { error: '缺失項目格式無法判讀' };
     const s = norm(c.v);
-    if (s === '無') return { items: [], none: true };
+    if (s === '無' || /^0+$/.test(s)) return { items: [], none: true };
     if (s.includes('無')) return { error: `同一格同時有「無」與其他內容「${s}」` };
     const nums = (s.match(/\d+/g) || []).map(Number);
     if (!nums.length) return { error: `沒有可判讀的項次「${s}」` };
@@ -103,7 +106,10 @@
     if (!sheet) return { errors: [{ row: '-', col: '-', msg: `找不到名為「${SHEET}」的工作表（目前有：${wb.sheets.map(s => s.name).join('、')}）` }], warnings, notes };
     const header = sheet.rows.get(1) || {};
     const colOf = {};
+    const useRemote = roc >= REMOTE_FROM;
+    if (!useRemote) notes.push({ row: '-', col: '是否偏遠', msg: `${roc} 年不統計是否偏遠（${REMOTE_FROM} 年起才加入），這一欄不會讀取` });
     for (const [key, test, label] of COLS) {
+      if (key === 'remote' && !useRemote) continue;
       const hits = Object.entries(header).filter(([, c]) => c && c.t === 's' && test(norm(c.v).replace(/\s/g, '')));
       if (!hits.length) err(1, label, `第 1 列找不到「${label}」欄`);
       else if (hits.length > 1) err(1, label, `「${label}」欄出現 ${hits.length} 次，無法判斷要用哪一欄`);
@@ -116,7 +122,7 @@
     for (const [rn, cells] of [...sheet.rows.entries()].sort((a, b) => a[0] - b[0])) {
       if (rn === 1) continue;
       const get = k => cells[colOf[k]];
-      if (COLS.every(([k]) => cellText(get(k)) === '')) continue;      // 整列空白（只看需要的欄位）
+      if (COLS.every(([k]) => colOf[k] === undefined || cellText(get(k)) === '')) continue;      // 整列空白（只看需要的欄位）
       const r = { row: rn };
       const date = parseDate(get('date'));
       if (!date) err(rn, '日期', '日期無法判讀', cellText(get('date')));
@@ -125,8 +131,8 @@
       if (!r.company) err(rn, '承攬廠商', '承攬廠商空白');
       r.district = cellText(get('district')).replace(/\s/g, '');
       if (!valid.has(r.district)) err(rn, '行政區', '不是高雄市 38 個行政區之一', cellText(get('district')));
-      r.remote = cellText(get('remote'));
-      if (r.remote !== '是' && r.remote !== '否') err(rn, '是否偏遠', '只能填「是」或「否」', r.remote);
+      r.remote = useRemote ? cellText(get('remote')) : null;
+      if (useRemote && r.remote !== '是' && r.remote !== '否') err(rn, '是否偏遠', '只能填「是」或「否」', r.remote);
       r.holiday = cellText(get('holiday'));
       if (r.holiday !== '假日' && r.holiday !== '非假日') err(rn, '是否假日', '只能填「假日」或「非假日」', r.holiday);
       for (const k of ['place', 'type', 'industry']) {
@@ -196,11 +202,11 @@
     }
     const districts = {};
     for (const name of districtNames) districts[name] = { total: 0, remote: null, charts: blank() };
-    const sum = blank(); sum['是否偏遠'] = zero(['偏遠', '非偏遠']);
+    const sum = blank(); if (useRemote) sum['是否偏遠'] = zero(['偏遠', '非偏遠']);
     for (const r of rows) {
       const d = districts[r.district];
       d.total++; add(d.charts, r);
-      add(sum, r); sum['是否偏遠'][r.remote === '是' ? '偏遠' : '非偏遠']++;
+      add(sum, r); if (useRemote) sum['是否偏遠'][r.remote === '是' ? '偏遠' : '非偏遠']++;
     }
     for (const [name, s] of Object.entries(remoteBy)) if (s.size === 1) districts[name].remote = [...s][0] === '是';
     for (const d of Object.values(districts)) if (!d.total) d.charts = {};
