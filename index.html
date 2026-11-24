@@ -146,6 +146,9 @@
   .yearCard .flagTip ul { margin: 0; padding-left: 24px; }
   .yearCard .flagTip li { margin: 3px 0; }
   .yearCard .flag:hover + .flagTip, .yearCard .flag:focus + .flagTip { opacity: 1; visibility: visible; }
+  .yearItem { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .yearDl { font-size: 24px; color: #ffc000; text-decoration: none; border: 1px solid rgba(255,192,0,.6); border-radius: 999px; padding: 6px 24px; display: inline-flex; align-items: center; gap: 8px; }
+  .yearDl:hover, .yearDl:focus-visible { background: rgba(255,192,0,.16); color: #fff; outline: none; }
   #yearMsg { font-size: 26px; color: #ffb3b3; min-height: 1em; }
   #uploadLink { position: absolute; right: 48px; bottom: 36px; font-size: 22px; color: var(--ink-3); text-decoration: none; border-bottom: 1px dashed rgba(255,255,255,.35); }
   #uploadLink:hover { color: #fff; }
@@ -560,8 +563,16 @@ async function loadYear(y) { return yearCache[y] || (yearCache[y] = await getJSO
 async function showYears() {
   setView('years');
   const list = $('#yearList'); list.innerHTML = '';
+  const pptx = document.body.classList.contains('preview') ? Promise.resolve({ years: [] })
+    : fetch('pptx/index.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : { years: [] }).catch(() => ({ years: [] }));
   for (const y of YEARS) {
-    const b = h('button', 'yearCard', list);
+    const item = h('div', 'yearItem', list);
+    const b = h('button', 'yearCard', item);
+    pptx.then(p => {
+      if (!(p.years || []).includes(y)) return;
+      const a = h('a', 'yearDl', item, '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>下載 PPT');
+      a.href = `pptx/${y}.pptx` + (p.built ? `?v=${p.built}` : ''); a.download = `${y}年高雄市局限空間工程分布統計互動式地圖.pptx`;
+    });
     b.innerHTML = `<div class="y">${esc(y)}<small>年</small></div><div class="m">載入中…</div>`;
     b.onclick = async () => {
       try { applyYear(await loadYear(y)); clearLit(); enterMap(); }
