@@ -45,6 +45,13 @@
   code { background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 5px; }
   #log { white-space: pre-wrap; font-size: 15px; color: var(--ink2); margin-top: 10px; }
   [hidden] { display: none !important; }
+  /* 可能有誤的提醒視窗 */
+  #flagModal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 50; padding: 16px; }
+  #flagModal .dlg { width: min(560px, 100%); background: #1d2b4a; border: 1px solid var(--warn); border-radius: 14px; padding: 20px 22px 18px; box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+  #flagModal h3 { margin: 0 0 10px; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+  #flagModal ul { margin: 0 0 8px; padding-left: 20px; font-size: 16px; color: var(--ink2); max-height: 50vh; overflow: auto; }
+  #flagModal li { margin: 4px 0; }
+  #flagModal .btns { display: flex; gap: 12px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
   @media (max-width: 600px) { th, td { padding: 6px; font-size: 13px; } h1 { font-size: 26px; } }
 </style>
 </head>
@@ -101,6 +108,14 @@
   </section>
 </main>
 
+<div id="flagModal" hidden role="dialog" aria-modal="true" aria-labelledby="flagTitle">
+  <div class="dlg">
+    <h3 id="flagTitle"><svg width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><path d="M12 1.5 23 20.5H1Z" fill="#ffc000" stroke="#8a5a00" stroke-width="1.2" stroke-linejoin="round"/><path d="M12 8v6" stroke="#222" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.4" fill="#222"/></svg>以下內容可能有誤</h3>
+    <ul id="flagList"></ul>
+    <p class="muted" style="margin:0">這些不會擋住上傳；上傳後，年度選擇頁會標示這些疑慮。</p>
+    <div class="btns"><button class="secondary" id="flagReupload">重新上傳</button><button id="flagGo">直接上傳</button></div>
+  </div>
+</div>
 <script src="xlsx.js"></script>
 <script src="stats.js"></script>
 <script>
@@ -134,6 +149,7 @@
   async function run() {
     await ready;
     const roc = +$('#year').value;
+    $('#flagModal').hidden = true;
     $('#result').hidden = false; $('#publish').hidden = true; $('#previewWrap').hidden = true; $('#issues').innerHTML = '';
     if (!(roc >= 100 && roc <= 200 && Number.isInteger(roc))) { $('#banner').innerHTML = '<div class="banner bad">請先填寫正確的民國年（例如 115）</div>'; return; }
     if (!/\.xlsx$/i.test(fileObj.name)) { $('#banner').innerHTML = '<div class="banner bad">只接受 .xlsx 檔（若是 .xls 或 .ods，請用 Excel 另存為 .xlsx）</div>'; return; }
@@ -189,7 +205,18 @@
     $('#overwrite').innerHTML = existing.includes(roc)
       ? `<div class="banner bad">網站上已經有 ${roc} 年的資料，發布後會<b>覆蓋</b>舊資料。</div>` : '';
     $('#log').textContent = '';
+    if (r.flags && r.flags.length) {
+      $('#flagList').innerHTML = r.flags.map(f => `<li>${esc(f)}</li>`).join('');
+      $('#flagModal').hidden = false; $('#flagGo').focus();
+    }
   }
+  $('#flagGo').onclick = () => { $('#flagModal').hidden = true; $('#publish').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  $('#flagReupload').onclick = () => {
+    $('#flagModal').hidden = true;
+    result = null; fileObj = null; file.value = ''; $('#fname').textContent = '只接受 .xlsx';
+    $('#result').hidden = true; $('#publish').hidden = true;
+    file.click();
+  };
 
   /* ---- 發布：只把統計結果 JSON 寫進 repo ---- */
   const api = (path, opt = {}) => fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}`, {

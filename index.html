@@ -134,6 +134,18 @@
   .yearCard .y small { font-size: 40px; margin-left: 6px; }
   .yearCard .m { margin-top: 18px; font-size: 26px; color: var(--ink-2); line-height: 1.6; }
   .yearCard .m b { color: #fff; }
+  /* 資料有疑慮：方格右上角的警告符號，滑鼠停留顯示說明 */
+  .yearCard { position: relative; }
+  .yearCard .flag { position: absolute; top: 14px; right: 14px; width: 44px; height: 40px; display: grid; place-items: center; cursor: help; z-index: 3; }
+  .yearCard .flag svg { width: 40px; height: 36px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+  .yearCard .flagTip { position: absolute; top: 52px; right: -8px; width: 520px; padding: 16px 20px; border-radius: 12px; text-align: left;
+              background: #fff8dc; color: #2a2a2a; font-size: 21px; line-height: 1.5; box-shadow: 0 12px 30px rgba(0,0,0,.5);
+              opacity: 0; visibility: hidden; transition: opacity .15s; pointer-events: none; z-index: 10; }
+  .yearCard .flagTip::before { content: ''; position: absolute; top: -10px; right: 24px; border: 10px solid transparent; border-top: 0; border-bottom-color: #fff8dc; }
+  .yearCard .flagTip b { display: block; margin-bottom: 6px; color: #8a5a00; }
+  .yearCard .flagTip ul { margin: 0; padding-left: 24px; }
+  .yearCard .flagTip li { margin: 3px 0; }
+  .yearCard .flag:hover + .flagTip, .yearCard .flag:focus + .flagTip { opacity: 1; visibility: visible; }
   #yearMsg { font-size: 26px; color: #ffb3b3; min-height: 1em; }
   #uploadLink { position: absolute; right: 48px; bottom: 36px; font-size: 22px; color: var(--ink-3); text-decoration: none; border-bottom: 1px dashed rgba(255,255,255,.35); }
   #uploadLink:hover { color: #fff; }
@@ -558,6 +570,11 @@ async function showYears() {
     loadYear(y).then(Y => {
       const n = Object.values(Y.districts).filter(d => d.total > 0).length;
       b.querySelector('.m').innerHTML = `總場次 <b>${Y.summary.total}</b> 場<br>有資料的行政區 <b>${n}</b> 區`;
+      if (Array.isArray(Y.flags) && Y.flags.length) {
+        const f = h('span', 'flag', b, '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 1.5 23 20.5H1Z" fill="#ffc000" stroke="#8a5a00" stroke-width="1.2" stroke-linejoin="round"/><path d="M12 8v6" stroke="#222" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.4" fill="#222"/></svg>');
+        f.setAttribute('aria-label', '資料有疑慮'); f.tabIndex = -1;
+        h('span', 'flagTip', b, `<b>此年度資料有以下疑慮</b><ul>${Y.flags.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`);
+      }
     }).catch(() => { b.querySelector('.m').textContent = '資料讀取失敗'; });
   }
 }

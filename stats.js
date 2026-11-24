@@ -146,7 +146,7 @@
       if (it.error) err(rn, '缺失項目', it.error, cellText(get('items')));
       else {
         r.items = it.items;
-        if (it.dup) warnings.push({ row: rn, col: '缺失項目', msg: '同一格有重複的項次，已只算一次', val: cellText(get('items')) });
+        if (it.dup) warnings.push({ kind: 'dupItem', row: rn, col: '缺失項目', msg: '同一格有重複的項次，已只算一次', val: cellText(get('items')) });
         if (it.fromNumber) notes.push({ row: rn, col: '缺失項目', msg: `此格是數字格式，已讀為第 ${it.items.join('、')} 項；建議改成文字格式`, val: cellText(get('items')) });
       }
       rows.push(r);
@@ -156,15 +156,15 @@
     // ---- 提醒（不影響統計） ----
     const westYear = roc + 1911;
     const offYear = rows.filter(r => r.date && r.date.y !== westYear);
-    if (offYear.length) warnings.push({ row: offYear.map(r => r.row).join('、'), col: '日期', msg: `共 ${offYear.length} 筆日期不在 ${roc} 年（${westYear} 年）內，仍會計入 ${roc} 年統計，請確認` });
+    if (offYear.length) warnings.push({ kind: 'year', row: offYear.map(r => r.row).join('、'), col: '日期', msg: `共 ${offYear.length} 筆日期不在 ${roc} 年（${westYear} 年）內，仍會計入 ${roc} 年統計，請確認` });
     const keyCount = {};
     for (const r of rows) if (r.date) { const k = `${r.date.y}-${r.date.m}-${r.date.d}|${r.company}|${r.district}`; (keyCount[k] = keyCount[k] || []).push(r.row); }
     for (const [k, list] of Object.entries(keyCount)) if (list.length > 1)
-      warnings.push({ row: list.join('、'), col: '日期／承攬廠商／行政區', msg: '日期、承攬廠商、行政區完全相同，可能重複登打（仍各算一場）', val: k.split('|').slice(1).join('／') });
+      warnings.push({ kind: 'dup', row: list.join('、'), col: '日期／承攬廠商／行政區', msg: '日期、承攬廠商、行政區完全相同，可能重複登打（仍各算一場）', val: k.split('|').slice(1).join('／') });
     const remoteBy = {};
     for (const r of rows) if (r.remote === '是' || r.remote === '否') (remoteBy[r.district] = remoteBy[r.district] || new Set()).add(r.remote);
     for (const [d, s] of Object.entries(remoteBy)) if (s.size > 1)
-      warnings.push({ row: rows.filter(r => r.district === d).map(r => r.row).join('、'), col: '是否偏遠', msg: `${d}同時出現「是」與「否」，地圖上不會標示此區是否偏遠` });
+      warnings.push({ kind: 'remote', district: d, row: rows.filter(r => r.district === d).map(r => r.row).join('、'), col: '是否偏遠', msg: `${d}同時出現「是」與「否」，地圖上不會標示此區是否偏遠` });
     const missingCal = new Set();
     for (const r of rows) {
       if (!r.date || (r.holiday !== '假日' && r.holiday !== '非假日')) continue;
@@ -174,7 +174,7 @@
       const wd = new Date(Date.UTC(r.date.y, r.date.m - 1, r.date.d)).getUTCDay();
       const off = cal.holidays.includes(iso) || ((wd === 0 || wd === 6) && !cal.workdays.includes(iso));
       if ((r.holiday === '假日') !== off)
-        warnings.push({ row: r.row, col: '是否假日', msg: `填「${r.holiday}」，但政府辦公日曆表此日為${off ? '放假日' : '上班日'}（星期${'日一二三四五六'[wd]}）`, val: iso });
+        warnings.push({ kind: r.date.y === westYear ? 'holiday' : 'holidayOffYear', row: r.row, col: '是否假日', msg: `填「${r.holiday}」，但政府辦公日曆表此日為${off ? '放假日' : '上班日'}（星期${'日一二三四五六'[wd]}）`, val: iso });
     }
     for (const y of missingCal) notes.push({ row: '-', col: '是否假日', msg: `網站尚未收錄 ${y} 年（民國 ${y - 1911} 年）政府辦公日曆表，該年日期略過假日比對` });
 
@@ -185,7 +185,7 @@
     for (const r of rows) for (const k in seen) seen[k].add(r[k]);
     const colName = { place: '局限空間地點', industry: '行業別', type: '局限空間類型' };
     for (const k in seen) for (const v of seen[k]) if (v !== '其他' && !ORDER[k].includes(v))
-      warnings.push({ row: rows.filter(r => r[k] === v).map(r => r.row).join('、'), col: colName[k], msg: `「${v}」不是原本的分類，會成為一個新類別；如果是打錯字，請修正後重新上傳`, val: v });
+      warnings.push({ kind: 'category', cat: v, colName: colName[k], row: rows.filter(r => r[k] === v).map(r => r.row).join('、'), col: colName[k], msg: `「${v}」不是原本的分類，會成為一個新類別；如果是打錯字，請修正後重新上傳`, val: v });
     const cats = { place: orderCats('place', seen.place), industry: orderCats('industry', seen.industry), type: orderCats('type', seen.type) };
     const zero = list => Object.fromEntries(list.map(k => [k, 0]));
     const blank = () => ({
@@ -223,12 +223,32 @@
       .map(r => [r.company, r.items.length, r.items.join('、'), `${r.date.y}-${pad(r.date.m)}-${pad(r.date.d)}`])
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant') || a[3].localeCompare(b[3]));
 
+    const flags = summarizeFlags(warnings);
     const data = {
-      year: roc, source: 'upload', generated: new Date().toISOString(), rows: rows.length,
+      year: roc, source: 'upload', generated: new Date().toISOString(), rows: rows.length, flags,
       districts,
       summary: { total: rows.length, charts: sum, items: Object.entries(itemCount).map(([name, v]) => ({ name, v })), companies },
     };
-    return { errors, warnings, notes, rows: rows.length, data };
+    return { errors, warnings, notes, rows: rows.length, data, flags };
+  }
+
+  // 可能有誤的地方 → 簡短清單（上傳時跳出提醒、年度選擇頁顯示）。年份不在年度內的提醒暫不列入。
+  function rowList(rs) {
+    const all = rs.flatMap(r => String(r).split('、')).map(Number).filter(n => n).sort((a, b) => a - b);
+    const u = [...new Set(all)];
+    return '第 ' + (u.length > 8 ? u.slice(0, 8).join('、') + ' 等' : u.join('、')) + ' 列';
+  }
+  function summarizeFlags(warnings) {
+    const out = [], by = k => warnings.filter(w => w.kind === k);
+    const hol = by('holiday');
+    if (hol.length) out.push(`「是否假日」與政府行事曆不符：${hol.length} 筆（${rowList(hol.map(w => w.row))}）`);
+    const dup = by('dup');
+    if (dup.length) out.push(`日期、承攬廠商、行政區完全相同，疑似重複登打：${dup.length} 組（${rowList(dup.map(w => w.row))}）`);
+    for (const w of by('remote')) out.push(`${w.district}的「是否偏遠」有的填是、有的填否（${rowList([w.row])}）`);
+    for (const w of by('category')) out.push(`${w.colName}「${w.cat}」不在原有分類，可能打錯字（${rowList([w.row])}）`);
+    const di = by('dupItem');
+    if (di.length) out.push(`同一格缺失項目有重複項次：${di.length} 筆（${rowList(di.map(w => w.row))}）`);
+    return out;
   }
 
   const api = { analyze, parseItems };
