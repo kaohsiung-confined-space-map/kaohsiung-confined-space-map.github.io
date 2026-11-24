@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高雄市局限空間工程分布統計 互動式地圖</title>
+<style>
+  :root {
+    --ink: #ffffff;
+    --ink-2: rgba(255,255,255,.78);
+    --ink-3: rgba(255,255,255,.55);
+    --navy-a: #203864;
+    --navy-b: #000000;
+    --line: #8faadc;
+    --font: "Microsoft JhengHei", "微軟正黑體", "PingFang TC", "Noto Sans TC", "Heiti TC", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: var(--font); color: var(--ink); }
+  #viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+  #stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: 50% 50%; overflow: hidden; user-select: none; }
+
+  /* 背景：深藍（地圖/各區）與夕陽（全區總覽）兩層交叉淡化 */
+  .bg { position: absolute; inset: 0; transition: opacity .6s ease; }
+  #bgNavy { background: linear-gradient(180deg, var(--navy-a) 0%, var(--navy-b) 100%); }
+  #bgSun { background: linear-gradient(180deg, #203864 0%, #87354c 50%, #c55a11 100%); opacity: 0; }
+  body[data-view="summary"] #bgSun { opacity: 1; }
+
+  /* 地圖 */
+  #map { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+  #map .d { fill: #222a35; stroke: var(--line); stroke-width: 1.2px; vector-effect: non-scaling-stroke; cursor: pointer; }
+  #map .deco { fill: #222a35; stroke: var(--line); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+  #base, #deco { transition: opacity .45s ease, transform .6s cubic-bezier(.2,.7,.2,1); transform-box: view-box; }
+  #top path { display: none; pointer-events: none; stroke: var(--line); stroke-width: 1.2px; vector-effect: non-scaling-stroke;
+              transform-box: view-box; transform-origin: 0 0; }
+  #top path.on { display: inline; }
+  #top path.icon { stroke: none; }
+  body[data-view="detail"] #base, body[data-view="detail"] #deco,
+  body[data-view="summary"] #base, body[data-view="summary"] #deco,
+  body[data-view="cover"] #base, body[data-view="cover"] #deco,
+  body[data-view="years"] #base, body[data-view="years"] #deco { opacity: 0; pointer-events: none; }
+
+  #logo { position: absolute; cursor: pointer; transition: opacity .4s ease, transform .4s ease; }
+  #logo:hover { transform: scale(1.03); }
+  body:not([data-view="map"]) #logo { opacity: 0; pointer-events: none; }
+
+  /* 區名按鈕 */
+  #buttons { position: absolute; inset: 0; pointer-events: none; }
+  .btn { position: absolute; display: flex; align-items: center; justify-content: center; pointer-events: auto;
+         font-weight: 700; font-size: 39px; letter-spacing: 1px; color: #fff; cursor: pointer; border-radius: 3px;
+         transition: opacity .35s ease, transform .45s cubic-bezier(.2,.7,.2,1); }
+  .btn.lit { box-shadow: inset 0 2px 2px rgba(255,255,255,.55), inset 0 -3px 4px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.45); }
+  body:not([data-view="map"]) .btn { opacity: 0; transform: translateX(160px); pointer-events: none; }
+
+  #label { position: absolute; border: 2px solid #d0cece; display: none; align-items: center; justify-content: center;
+           font-size: 72px; font-weight: 700; pointer-events: none; text-shadow: 0 3px 6px rgba(0,0,0,.5); }
+  #label.show { display: flex; }
+  body:not([data-view="map"]) #label { display: none; }
+
+  #hint { position: absolute; left: 40px; top: 425px; width: 360px; line-height: 1.6; font-size: 22px; color: var(--ink-3); transition: opacity .4s; }
+  body:not([data-view="map"]) #hint { opacity: 0; }
+
+  /* 頁面通用 */
+  section.view { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .35s ease; }
+  body[data-view="detail"] #detail, body[data-view="summary"] #summary, body[data-view="cover"] #cover, body[data-view="years"] #years { opacity: 1; pointer-events: auto; }
+  .title { position: absolute; left: 14px; top: 10px; width: 960px; font-size: 56px; font-weight: 700; padding: 4px 6px 6px;
+           border-bottom: 2px solid rgba(255,255,255,.85); text-shadow: 0 2px 6px rgba(0,0,0,.35); }
+  .tabs { position: absolute; left: 20px; top: 112px; display: flex; gap: 10px; }
+  .tab { font: 700 24px var(--font); color: var(--ink-2); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.25);
+         padding: 8px 20px; border-radius: 999px; cursor: pointer; }
+  .tab:hover { background: rgba(255,255,255,.16); color: #fff; }
+  .tab.on { background: #fff; color: #1d2b4f; border-color: #fff; }
+  .total { position: absolute; font-size: 44px; font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,.6); white-space: nowrap; }
+  .back { position: absolute; right: 36px; bottom: 30px; width: 128px; height: 108px; cursor: pointer; filter: drop-shadow(0 4px 6px rgba(0,0,0,.45)); transition: transform .2s; }
+  .back:hover { transform: translateX(-8px); }
+  .pages { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; pointer-events: none; }
+  .page { position: absolute; inset: 0; pointer-events: none; }
+  .page.on > .card { pointer-events: auto; }
+  .page > .card { position: absolute; opacity: 0; transform: translateY(160px); transition: opacity .45s ease, transform .55s cubic-bezier(.2,.7,.2,1); }
+  .page.on > .card { opacity: 1; transform: none; }
+  .page.left > .card { transform: translateX(-260px); }
+  .page.up > .card { transform: translateY(-200px); }
+
+  .chartTitle { font-size: 30px; font-weight: 700; text-align: center; margin-bottom: 6px; color: #fff; }
+  .chartTitle.small { font-size: 24px; color: var(--ink-2); }
+  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; font-size: 22px; color: var(--ink-2); margin-top: 8px; }
+  .legend.cols2 { display: grid; grid-template-columns: repeat(2, auto); justify-content: center; gap: 6px 34px; }
+  .legend .it { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .legend .sw { width: 18px; height: 18px; border-radius: 4px; flex: none; }
+  .legend .n { color: #fff; font-weight: 700; margin-left: 2px; }
+  .legend .it.zero { opacity: .45; }
+  .nodata { position: absolute; display: flex; align-items: center; justify-content: center; font-size: 30px; color: var(--ink-3); border: 2px dashed rgba(255,255,255,.25); border-radius: 50%; }
+  svg.pie path.slice { cursor: default; transition: transform .15s ease; transform-box: view-box; }
+  svg.pie text { font-family: var(--font); font-weight: 700; pointer-events: none; }
+  #tip { position: absolute; pointer-events: none; background: rgba(10,16,32,.94); border: 1px solid rgba(255,255,255,.3); padding: 10px 16px;
+         border-radius: 8px; font-size: 24px; white-space: nowrap; opacity: 0; transition: opacity .12s; z-index: 50; }
+  #tip b { font-size: 26px; }
+  .bigNodata { position: absolute; left: 40px; top: 210px; width: 1420px; height: 780px; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; gap: 14px; font-size: 64px; font-weight: 700; color: var(--ink-2); }
+  .bigNodata small { font-size: 28px; font-weight: 400; color: var(--ink-3); }
+
+  /* 表格 */
+  .tbl { border-collapse: collapse; font-size: 23px; width: 100%; }
+  .tbl th { position: sticky; top: 0; background: #3b2a4a; text-align: left; font-weight: 700; padding: 10px 14px; border-bottom: 2px solid rgba(255,255,255,.7); }
+  .tbl td { padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,.22); }
+  .tbl td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .tbl tr:hover td { background: rgba(255,255,255,.08); }
+  .scroll { overflow-y: auto; height: 100%; padding-right: 8px; }
+  .scroll::-webkit-scrollbar { width: 10px; } .scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.3); border-radius: 5px; }
+  .note { display: flex; gap: 26px; font-size: 26px; margin-top: 18px; }
+  .note div { background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.3); border-radius: 10px; padding: 12px 20px; }
+  .note b { font-size: 34px; margin-left: 8px; }
+
+  /* 封面 */
+  #cover { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  #cover img { position: absolute; left: 477px; top: 77px; width: 973px; height: 927px; opacity: .92; }
+  #cover .t { position: absolute; left: 0; right: 0; text-align: center; font-weight: 700; text-shadow: 6px 6px 8px rgba(0,0,0,.55); }
+  #cover .t1 { top: 175px; font-size: 96px; letter-spacing: 6px; }
+  #cover .t2 { top: 380px; font-size: 80px; line-height: 1.25; }
+  #cover .go { position: absolute; bottom: 70px; left: 0; right: 0; text-align: center; font-size: 30px; color: var(--ink-2); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  body:not([data-view="cover"]) #cover * { pointer-events: none; }
+
+
+  /* 年度選擇 */
+  #years { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 56px; }
+  #years h1 { margin: 0; font-size: 76px; letter-spacing: 6px; text-shadow: 0 4px 10px rgba(0,0,0,.5); }
+  #years .sub { margin-top: -36px; font-size: 28px; color: var(--ink-2); }
+  #yearList { display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; max-width: 1600px; }
+  .yearCard { width: 360px; padding: 34px 30px 30px; border-radius: 18px; cursor: pointer; text-align: center;
+              background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.04)); border: 2px solid rgba(255,255,255,.28);
+              box-shadow: 0 10px 30px rgba(0,0,0,.35); transition: transform .2s, border-color .2s, background .2s; font: inherit; color: inherit; }
+  .yearCard:hover, .yearCard:focus-visible { transform: translateY(-8px); border-color: #ffc000; background: linear-gradient(180deg, rgba(255,192,0,.25), rgba(237,125,49,.12)); outline: none; }
+  .yearCard .y { font-size: 92px; font-weight: 700; line-height: 1; }
+  .yearCard .y small { font-size: 40px; margin-left: 6px; }
+  .yearCard .m { margin-top: 18px; font-size: 26px; color: var(--ink-2); line-height: 1.6; }
+  .yearCard .m b { color: #fff; }
+  #yearMsg { font-size: 26px; color: #ffb3b3; min-height: 1em; }
+  #yearBadge { position: absolute; left: 584px; top: 44px; font: 700 26px var(--font); color: #fff; background: rgba(255,255,255,.1);
+               border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 8px 22px; cursor: pointer; transition: opacity .4s, background .2s; }
+  #yearBadge:hover { background: rgba(255,192,0,.3); }
+  body:not([data-view="map"]) #yearBadge { opacity: 0; pointer-events: none; }
+  .chip { display: inline-block; vertical-align: middle; margin-left: 18px; font-size: 26px; font-weight: 700; padding: 4px 16px;
+          border-radius: 999px; background: #70ad47; color: #fff; text-shadow: none; }
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: 1ms !important; animation: none !important; } }
+</style>
+</head>
+<body data-view="cover">
+<div id="viewport"><div id="stage">
+  <div class="bg" id="bgNavy"></div>
+  <div class="bg" id="bgSun"></div>
+
+  <svg id="map" viewBox="0 0 12192 6858" aria-label="高雄市行政區地圖">
+    <defs id="defs">
+      <filter id="bevel" x="-5%" y="-5%" width="110%" height="110%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="25" result="b"/>
+        <feSpecularLighting in="b" surfaceScale="4" specularConstant=".8" specularExponent="18" lighting-color="#fff" result="s">
+          <feDistantLight azimuth="225" elevation="45"/>
+        </feSpecularLighting>
+        <feComposite in="s" in2="SourceAlpha" operator="in" result="s2"/>
+        <feComposite in="SourceGraphic" in2="s2" operator="arithmetic" k2="1" k3=".55"/>
+      </filter>
+      <filter id="iconShadow" x="-40%" y="-40%" width="180%" height="180%">
+        <feDropShadow dx="-190" dy="152" stdDeviation="70" flood-color="#000" flood-opacity=".55"/>
+      </filter>
+    </defs>
+    <g id="deco"></g>
+    <g id="base"></g>
+    <g id="top"></g>
+  </svg>
+
+  <img id="logo" src="logo.png" alt="高雄市 Kaohsiung" title="全區總覽">
+  <div id="label"></div>
+  <div id="buttons"></div>
+  <div id="hint">滑鼠移到區名或地圖上即可預覽<br>點一下查看該區資料<br>點左上角 Logo 看全區總覽</div>
+
+  <section class="view" id="detail">
+    <div class="title" id="dTitle"></div>
+    <div class="tabs" id="dTabs"></div>
+    <div class="total" id="dTotal"></div>
+    <div class="pages" id="dPages"></div>
+    <svg class="back" id="dBack" viewBox="0 0 128 108" role="button" aria-label="返回地圖"><path d="M0 54 L54 0 V30 H128 V78 H54 V108 Z" fill="#2f5597" stroke="#6f8fd0" stroke-width="2"/></svg>
+  </section>
+
+  <section class="view" id="summary">
+    <div class="title">高雄市全區總覽</div>
+    <div class="tabs" id="sTabs"></div>
+    <img id="kmap" src="kaohsiung.png" alt="" style="position:absolute;left:1560px;top:33px;width:276px;height:340px;opacity:.95">
+    <div class="total" id="sTotal" style="left:1060px;top:104px;font-size:40px"></div>
+    <div class="pages" id="sPages"></div>
+    <svg class="back" id="sBack" viewBox="0 0 128 108" role="button" aria-label="返回地圖"><path d="M0 54 L54 0 V30 H128 V78 H54 V108 Z" fill="#2f5597" stroke="#6f8fd0" stroke-width="2"/></svg>
+  </section>
+
+  <section class="view" id="years">
+    <h1>選擇年度</h1>
+    <div class="sub">選一個年度查看該年的局限空間工程分布</div>
+    <div id="yearList"></div>
+    <div id="yearMsg"></div>
+  </section>
+  <button id="yearBadge" title="切換年度"></button>
+
+  <section class="view" id="cover">
+    <img src="emblem.png" alt="國立中正大學校徽">
+    <div class="t t1">國立中正大學</div>
+    <div class="t t2"><span id="coverYears">&nbsp;</span><br>高雄市局限空間工程分布統計<br>互動式地圖</div>
+    <div class="go">點一下進入地圖</div>
+  </section>
+
+  <div id="tip"></div>
+</div></div>
+
+<script>
+let MAP, YEAR, YEARS = [];
+const K = 1920 / 12192;               // 投影片 EMU/1000 → 畫布像素
+const $ = s => document.querySelector(s);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const h = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
+const px = b => ({ left: b[0] * K + 'px', top: b[1] * K + 'px', width: b[2] * K + 'px', height: b[3] * K + 'px' });
+
+/* ---------- 舞台縮放 ---------- */
+function fit() {
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+  $('#stage').style.transform = `translate(-50%,-50%) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+
+/* ---------- 漸層 ---------- */
+const defs = $('#defs'); const gradIds = new Map();
+function gradient(f) {
+  if (!f || f.t === 'none') return 'none';
+  if (f.t === 'solid') return f.c;
+  const key = JSON.stringify(f); if (gradIds.has(key)) return `url(#${gradIds.get(key)})`;
+  const id = 'g' + gradIds.size; gradIds.set(key, id);
+  let g;
+  if (f.t === 'lin') {
+    const a = f.ang * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    g = el('linearGradient', { id, x1: .5 - c / 2, y1: .5 - s / 2, x2: .5 + c / 2, y2: .5 + s / 2 }, defs);
+  } else g = el('radialGradient', { id, cx: .5, cy: .5, r: .7 }, defs);
+  for (const [p, c, o] of f.stops) el('stop', { offset: p, 'stop-color': c, 'stop-opacity': o }, g);
+  return `url(#${id})`;
+}
+const cssGradient = f => !f || f.t === 'none' ? 'transparent' : f.t === 'solid' ? f.c :
+  (f.t === 'lin' ? `linear-gradient(${f.ang + 90}deg,` : 'radial-gradient(circle,') + f.stops.map(([p, c]) => `${c} ${p * 100}%`).join(',') + ')';
+
+/* ---------- 地圖與按鈕 ---------- */
+const base = $('#base'), topG = $('#top'), btns = $('#buttons'), label = $('#label');
+let D = [];
+function setupMap() {
+  Object.assign(label.style, px(MAP.label));
+  Object.assign($('#logo').style, px(MAP.logo));
+  D = MAP.districts.map(x => ({ ...x }));
+  D.forEach((x, i) => {
+    x.i = i;
+    x.path = el('path', { d: x.d, class: 'd' }, base);
+    x.hi = el('path', { d: x.d }, topG);
+    x.btnEl = h('div', 'btn', btns, x.name);
+    Object.assign(x.btnEl.style, px(x.btn));
+    for (const t of [x.path, x.btnEl]) {
+      t.addEventListener('mouseenter', () => light(x));
+      t.addEventListener('mouseleave', () => unlight(x));
+      t.addEventListener('click', () => openDistrict(x));
+    }
+  });
+}
+/* 依年度資料決定每區「有資料／無資料」的亮起樣式 */
+function applyYear(Y) {
+  YEAR = Y;
+  D.forEach(x => {
+    x.data = Y.districts[x.name] || { total: 0, remote: null, charts: {} };
+    x.total = x.data.total || 0;
+    x.has = x.total > 0;
+    const st = x.has ? MAP.styles.litData : MAP.styles.litNone;
+    x.hi.setAttribute('fill', gradient(st.fill));
+    x.bevel = st.bevel;
+    x.hi.setAttribute('filter', x.bevel ? 'url(#bevel)' : '');
+    x.btnEl.dataset.fill = cssGradient(x.has ? MAP.styles.btnData : MAP.styles.btnNone);
+  });
+  $('#yearBadge').textContent = `${Y.year} 年度　切換年度 ▸`;
+  buildSummary();
+}
+
+let lit = null, view = 'cover', current = null, busy = false;
+function light(x) {
+  if (view !== 'map' || busy) return;
+  if (lit && lit !== x) unlight(lit);
+  lit = x;
+  x.hi.classList.add('on');
+  x.btnEl.classList.add('lit'); x.btnEl.style.background = x.btnEl.dataset.fill;
+  label.textContent = x.name; label.classList.add('show');
+}
+function unlight(x) {
+  if (lit !== x || view !== 'map' || busy) return;
+  x.hi.classList.remove('on');
+  x.btnEl.classList.remove('lit'); x.btnEl.style.background = '';
+  label.classList.remove('show'); lit = null;
+}
+function clearLit() { D.forEach(x => { x.hi.classList.remove('on', 'icon'); x.hi.removeAttribute('style'); x.btnEl.classList.remove('lit'); x.btnEl.style.background = ''; x.hi.setAttribute('filter', x.bevel ? 'url(#bevel)' : ''); }); label.classList.remove('show'); lit = null; }
+
+function setView(v) { view = v; document.body.dataset.view = v; hideTip(); }
+
+/* ---------- 封面 → 地圖 ---------- */
+$('#cover').addEventListener('click', () => { if (view === 'cover') showYears(); });
+$('#yearBadge').addEventListener('click', () => { if (view === 'map') { clearLit(); showYears(); } });
+addEventListener('keydown', e => {
+  if (view === 'cover' && (e.key === 'Enter' || e.key === ' ')) showYears();
+  else if (e.key === 'Escape' && (view === 'detail' || view === 'summary')) backToMap();
+  else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') pageKey(e.key === 'ArrowRight' ? 1 : -1);
+});
+function enterMap() {
+  setView('map');
+  const paths = [...base.children];
+  paths.forEach((p, i) => p.animate([{ transform: 'translateX(5200px)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+    { duration: 900, delay: 12 * i, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' }));
+  D.forEach((x, i) => x.btnEl.animate([{ opacity: 0, transform: 'translateX(80px)' }, { opacity: 1, transform: 'none' }],
+    { duration: 500, delay: 300 + 14 * i, easing: 'ease-out', fill: 'backwards' }));
+}
+
+/* ---------- 地圖 → 各區資料 ---------- */
+function flyMatrix(x) {
+  const b = x.box, ic = x.icon || [9800, 200, 1900, 2160];
+  const s = Math.min(ic[2] / b[2], ic[3] / b[3]);
+  const tx = ic[0] + (ic[2] - b[2] * s) / 2 - b[0] * s, ty = ic[1] + (ic[3] - b[3] * s) / 2 - b[1] * s;
+  return `translate(${tx}px,${ty}px) scale(${s})`;
+}
+function openDistrict(x) {
+  if (view !== 'map' || busy) return;
+  busy = true;
+  if (lit && lit !== x) { const l = lit; busy = false; unlight(l); busy = true; }
+  x.hi.classList.add('on'); x.hi.removeAttribute('filter');
+  current = x;
+  buildDetail(x);
+  setView('detail');
+  const a = x.hi.animate([{ transform: 'translate(0px,0px) scale(1)' }, { transform: flyMatrix(x) }],
+    { duration: 750, easing: 'cubic-bezier(.3,.6,.2,1)', fill: 'forwards' });
+  a.onfinish = () => { x.hi.style.transform = flyMatrix(x); a.cancel(); x.hi.classList.add('icon'); x.hi.setAttribute('filter', 'url(#iconShadow)'); busy = false; };
+  showPage('d', 0, 'up');
+}
+function backToMap() {
+  if (busy) return;
+  if (view === 'summary') { setView('map'); return; }
+  if (view !== 'detail') return;
+  busy = true;
+  const x = current;
+  x.hi.classList.remove('icon'); x.hi.removeAttribute('filter');
+  const a = x.hi.animate([{ transform: flyMatrix(x) }, { transform: 'translate(0px,0px) scale(1)' }],
+    { duration: 650, easing: 'cubic-bezier(.3,.6,.2,1)', fill: 'forwards' });
+  setView('map');
+  hidePages('d');
+  a.onfinish = () => { a.cancel(); x.hi.removeAttribute('style'); clearLit(); busy = false; };
+}
+$('#dBack').addEventListener('click', backToMap);
+$('#sBack').addEventListener('click', backToMap);
+$('#logo').addEventListener('click', () => { if (view === 'map') { clearLit(); setView('summary'); showPage('s', 0, 'up'); } });
+
+/* ---------- 分頁 ---------- */
+const pager = { d: { i: 0, n: 0 }, s: { i: 0, n: 0 } };
+function showPage(k, i, dir) {
+  const box = $('#' + k + 'Pages'), tabs = $('#' + k + 'Tabs');
+  [...box.children].forEach((p, j) => { p.classList.toggle('on', j === i); p.classList.remove('left', 'up'); if (j !== i) p.classList.add(j < i ? 'left' : 'up'); });
+  [...tabs.children].forEach((t, j) => t.classList.toggle('on', j === i));
+  pager[k].i = i; pager[k].n = box.children.length;
+  if (dir === 'up') { const p = box.children[i]; p.classList.remove('on'); p.classList.add('up'); void p.offsetWidth; p.classList.remove('up'); p.classList.add('on'); }
+}
+function hidePages(k) { [...$('#' + k + 'Pages').children].forEach(p => { p.classList.remove('on'); }); }
+function pageKey(d) {
+  const k = view === 'detail' ? 'd' : view === 'summary' ? 's' : null; if (!k) return;
+  const n = pager[k].i + d; if (n >= 0 && n < pager[k].n) showPage(k, n);
+}
+function makeTabs(k, names) {
+  const t = $('#' + k + 'Tabs'); t.innerHTML = '';
+  if (names.length < 2) return;
+  names.forEach((n, i) => { const b = h('button', 'tab', t, n); b.onclick = () => showPage(k, i); });
+}
+function card(page, box, delay = 0) {
+  const c = h('div', 'card', page); Object.assign(c.style, { left: box[0] + 'px', top: box[1] + 'px', width: box[2] + 'px', height: box[3] + 'px', transitionDelay: delay + 'ms' });
+  return c;
+}
+
+/* ---------- 圓餅圖 ---------- */
+const tip = $('#tip');
+function showTip(e, html) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const st = $('#stage').getBoundingClientRect(), s = st.width / 1920;
+  let x = (e.clientX - st.left) / s + 22, y = (e.clientY - st.top) / s + 22;
+  if (x + tip.offsetWidth > 1900) x -= tip.offsetWidth + 44;
+  if (y + tip.offsetHeight > 1060) y -= tip.offsetHeight + 44;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function hideTip() { tip.style.opacity = 0; }
+const lum = c => { const n = parseInt(c.slice(1), 16); const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(n >> 16 & 255) + .7152 * f(n >> 8 & 255) + .0722 * f(n & 255); };
+
+function pie(parent, c, o) {
+  const R = o.r, total = c.vals.reduce((a, b) => a + b, 0);
+  const wrap = h('div', '', parent);
+  if (o.title) h('div', 'chartTitle' + (o.small ? ' small' : ''), wrap, o.title);
+  const size = R * 2 + 8;
+  if (!total) {
+    const nd = h('div', 'nodata', wrap, '無資料');
+    Object.assign(nd.style, { position: 'relative', width: size + 'px', height: size + 'px', margin: '0 auto' });
+  } else {
+    const svg = el('svg', { class: 'pie', width: size, height: size, viewBox: `${-R - 4} ${-R - 4} ${size} ${size}` });
+    svg.style.display = 'block'; svg.style.margin = '0 auto'; wrap.appendChild(svg);
+    let a0 = -Math.PI / 2;
+    c.vals.forEach((v, i) => {
+      if (!v) return;
+      const a1 = a0 + v / total * Math.PI * 2, col = c.colors[i];
+      let p;
+      if (v === total) p = el('circle', { r: R, fill: col, class: 'slice' }, svg);
+      else {
+        const large = a1 - a0 > Math.PI ? 1 : 0;
+        p = el('path', { class: 'slice', fill: col, d: `M0 0 L${R * Math.cos(a0)} ${R * Math.sin(a0)} A${R} ${R} 0 ${large} 1 ${R * Math.cos(a1)} ${R * Math.sin(a1)}Z` }, svg);
+      }
+      p.setAttribute('stroke', '#16223d'); p.setAttribute('stroke-width', 2.5); p.setAttribute('stroke-linejoin', 'round');
+      const mid = (a0 + a1) / 2, pct = Math.round(v / total * 1000) / 10;
+      p.addEventListener('mousemove', e => { p.style.transform = `translate(${Math.cos(mid) * 8}px,${Math.sin(mid) * 8}px)`; showTip(e, `${c.cats[i]}<br><b>${v}</b> ${o.unit || ''}（${pct}%）`); });
+      p.addEventListener('mouseleave', () => { p.style.transform = ''; hideTip(); });
+      if (a1 - a0 > 0.42 && R >= 120) {
+        const rr = v === total ? 0 : R * .62, ink = lum(col) > .35 ? '#1b1b1b' : '#fff';
+        const t = el('text', { x: rr * Math.cos(mid), y: rr * Math.sin(mid), 'text-anchor': 'middle', fill: ink }, svg);
+        el('tspan', { x: rr * Math.cos(mid), dy: '-0.1em', 'font-size': R > 180 ? 34 : 26 }, t).textContent = v;
+        el('tspan', { x: rr * Math.cos(mid), dy: '1.1em', 'font-size': R > 180 ? 24 : 20 }, t).textContent = pct + '%';
+      }
+      a0 = a1;
+    });
+  }
+  if (o.legend !== false) {
+    const lg = h('div', 'legend' + (o.cols2 ? ' cols2' : ''), wrap);
+    c.cats.forEach((cat, i) => {
+      const it = h('div', 'it' + (c.vals[i] ? '' : ' zero'), lg);
+      h('span', 'sw', it).style.background = c.colors[i];
+      h('span', '', it, cat);
+      if (o.values !== false) h('span', 'n', it, c.vals[i]);
+    });
+  }
+  return wrap;
+}
+
+/* ---------- 年度資料 → 圖表 ---------- */
+const FALLBACK = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47', '#264478', '#9e480e', '#636363', '#997300'];
+const extraColor = {};
+function catColor(cat) {
+  if (MAP.palette[cat]) return MAP.palette[cat];
+  if (!extraColor[cat]) { const used = new Set([...Object.values(MAP.palette), ...Object.values(extraColor)]); extraColor[cat] = FALLBACK.find(c => !used.has(c)) || FALLBACK[Object.keys(extraColor).length % FALLBACK.length]; }
+  return extraColor[cat];
+}
+function toChart(obj) {
+  const cats = Object.keys(obj || {});
+  return { cats, vals: cats.map(k => +obj[k] || 0), colors: cats.map(catColor) };
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/* ---------- 各區頁面 ---------- */
+function violationPage(pg, p) {
+  const l1 = card(pg, [40, 200, 340, 380], 0); pie(l1, toChart(p['場次分布']), { r: 100, title: '場次分布', small: true, unit: '場' });
+  const l2 = card(pg, [40, 610, 340, 380], 70); pie(l2, toChart(p['違規公司分布']), { r: 100, title: '違規公司分布', small: true, unit: '家' });
+  const m1 = card(pg, [420, 210, 520, 760], 140); pie(m1, toChart(p['假日違規']), { r: 225, title: '假日違規', unit: '場' });
+  const m2 = card(pg, [960, 210, 520, 760], 210); pie(m2, toChart(p['非假日違規']), { r: 225, title: '非假日違規', unit: '場' });
+}
+function sitePage(pg, p) {
+  const a = card(pg, [60, 210, 640, 820], 0); pie(a, toChart(p['局限空間地點']), { r: 230, title: '局限空間地點', cols2: true, unit: '場' });
+  const b = card(pg, [760, 210, 720, 820], 90); pie(b, toChart(p['行業別']), { r: 230, title: '行業別（以委託廠商為主）', cols2: true, unit: '場' });
+}
+function buildDetail(x) {
+  $('#dTitle').textContent = x.name;
+  if (x.data.remote === true) h('span', 'chip', $('#dTitle'), '偏遠地區');
+  const t = $('#dTotal'); t.textContent = `總場次：${x.total} 場`;
+  const ic = x.icon || [9800, 200, 1900, 2160];
+  Object.assign(t.style, { left: 'auto', right: '40px', top: Math.min(400, (ic[1] + ic[3]) * K + 10) + 'px' });
+  const box = $('#dPages'); box.innerHTML = '';
+  if (!x.has) {
+    const pg = h('div', 'page', box);
+    const c = card(pg, [40, 210, 1420, 780]); c.className = 'card bigNodata'; c.innerHTML = `無資料<small>本區 ${YEAR.year} 年無局限空間工程紀錄</small>`;
+    makeTabs('d', []); return;
+  }
+  const p = x.data.charts;
+  violationPage(h('div', 'page', box), p);
+  sitePage(h('div', 'page', box), p);
+  makeTabs('d', ['違規概況', '地點與行業']);
+}
+
+/* ---------- 全區總覽 ---------- */
+function buildSummary() {
+  const S = YEAR.summary;
+  $('#sTotal').textContent = `總場次：${S.total} 場`;
+  const box = $('#sPages'); box.innerHTML = '';
+  const p1 = h('div', 'page', box); violationPage(p1, S.charts);
+  const p2 = h('div', 'page', box); sitePage(p2, S.charts);
+  const tabs = ['違規概況', '地點與行業'];
+  if (S.items && S.items.length) {
+  // 缺失項目統計：長條圖 + 表
+  const p3 = h('div', 'page', box);
+  const cb = card(p3, [40, 200, 1180, 830], 0);
+  h('div', 'chartTitle', cb, '缺失項目統計');
+  const bars = S.items, max = Math.max(1, ...bars.map(b => b.v)), W = 1160, H = 640, bw = W / bars.length;
+  const step = Math.max(1, Math.ceil(max / 6 / 5) * 5), top = Math.ceil(max / step) * step;
+  const svg = el('svg', { width: W, height: H + 70, viewBox: `0 0 ${W} ${H + 70}` }); cb.appendChild(svg);
+  for (let g = 0; g <= top; g += step) { const y = H - g / top * (H - 40); el('line', { x1: 0, x2: W, y1: y, y2: y, stroke: 'rgba(255,255,255,.14)' }, svg); el('text', { x: 0, y: y - 6, fill: 'rgba(255,255,255,.5)', 'font-size': 18 }, svg).textContent = g; }
+  bars.forEach((b, i) => {
+    const bh = b.v / top * (H - 40), x = i * bw + bw * .18, w = bw * .64, top_ = b.v === max;
+    const r = el('path', { d: `M${x} ${H} V${H - bh + 4} Q${x} ${H - bh} ${x + 4} ${H - bh} H${x + w - 4} Q${x + w} ${H - bh} ${x + w} ${H - bh + 4} V${H}Z`, fill: top_ ? '#ffc000' : '#ed7d31' }, svg);
+    r.addEventListener('mousemove', e => showTip(e, `${b.name === '無/空白' ? '無／空白' : '缺失' + b.name}<br><b>${b.v}</b> 次`)); r.addEventListener('mouseleave', hideTip);
+    el('text', { x: x + w / 2, y: H - bh - 10, 'text-anchor': 'middle', fill: '#fff', 'font-size': 22, 'font-weight': 700 }, svg).textContent = b.v;
+    el('text', { x: x + w / 2, y: H + 32, 'text-anchor': 'middle', fill: 'rgba(255,255,255,.8)', 'font-size': 20 }, svg).textContent = b.name.replace('第', '').replace('項', '').replace('無/空白', '無');
+  });
+  el('text', { x: W / 2, y: H + 64, 'text-anchor': 'middle', fill: 'rgba(255,255,255,.6)', 'font-size': 20 }, svg).textContent = '缺失項目（項次）';
+  const tb = card(p3, [1260, 400, 600, 640], 90);
+  const real = bars.filter(b => /\d/.test(b.name));
+  const most = real.reduce((a, b) => b.v > a.v ? b : a), least = real.reduce((a, b) => b.v < a.v ? b : a);
+  const n = h('div', 'note', tb);
+  h('div', '', n, `缺失最多項目<b>${esc(most.name)}</b>`); h('div', '', n, `缺失最少項目<b>${esc(least.name)}</b>`);
+  n.style.flexDirection = 'column'; n.style.marginTop = '0';
+  tabs.push('缺失項目統計');
+  }
+  if (S.companies && S.companies.length) {
+  const p4 = h('div', 'page', box);
+  const tc = card(p4, [40, 190, 1690, 860], 0);
+  const sc = h('div', 'scroll', tc);
+  const rows = S.companies;
+  sc.innerHTML = `<table class="tbl"><thead><tr><th>承攬廠商</th><th style="width:220px;text-align:right">缺失項次總數</th><th style="width:640px">缺失項目（項次）</th></tr></thead><tbody>${
+    [...rows].sort((a, b) => b[1] - a[1]).map(r => `<tr><td>${esc(r[0])}</td><td class="num">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('')}</tbody></table>`;
+  tabs.push('缺失五項以上公司');
+  }
+  makeTabs('s', tabs);
+}
+
+/* ---------- 年度清單與載入 ---------- */
+const yearCache = {};
+async function getJSON(url) { const r = await fetch(url, { cache: 'no-cache' }); if (!r.ok) throw new Error(url + ' ' + r.status); return r.json(); }
+async function loadYear(y) { return yearCache[y] || (yearCache[y] = await getJSON(`data/${y}.json`)); }
+async function showYears() {
+  setView('years');
+  const list = $('#yearList'); list.innerHTML = '';
+  for (const y of YEARS) {
+    const b = h('button', 'yearCard', list);
+    b.innerHTML = `<div class="y">${esc(y)}<small>年</small></div><div class="m">載入中…</div>`;
+    b.onclick = async () => {
+      try { applyYear(await loadYear(y)); clearLit(); enterMap(); }
+      catch (e) { $('#yearMsg').textContent = `無法讀取 ${y} 年資料`; }
+    };
+    loadYear(y).then(Y => {
+      const n = Object.values(Y.districts).filter(d => d.total > 0).length;
+      b.querySelector('.m').innerHTML = `總場次 <b>${Y.summary.total}</b> 場<br>有資料的行政區 <b>${n}</b> 區`;
+    }).catch(() => { b.querySelector('.m').textContent = '資料讀取失敗'; });
+  }
+}
+(async function init() {
+  try {
+    [MAP, { years: YEARS }] = await Promise.all([getJSON('map.json'), getJSON('data/years.json')]);
+    YEARS.sort((a, b) => b - a);
+    const ys = [...YEARS].sort((a, b) => a - b);
+    $('#coverYears').textContent = ys.length === 1 ? `中華民國 ${ys[0]} 年` : `中華民國 ${ys[0]}–${ys[ys.length - 1]} 年`;
+    setupMap();
+  } catch (e) {
+    $('#coverYears').textContent = '資料讀取失敗，請重新整理';
+  }
+})();
+</script>
+</body>
+</html>
