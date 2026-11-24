@@ -6,7 +6,7 @@
 import sys, os, json, subprocess, tempfile, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-site, out = sys.argv[1], sys.argv[2]
+site, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 os.makedirs(out, exist_ok=True)
 years = json.load(open(os.path.join(site, 'data', 'years.json'), encoding='utf-8'))['years']
 ok, failed = [], {}
@@ -23,7 +23,7 @@ for y in sorted(years):
         r = run('buildyear.py', data_path, comp, spec, str(y))
         print(r.stdout); print(r.stderr, file=sys.stderr)
         if r.returncode:
-            raise RuntimeError('產生簡報規格失敗（可能有原簡報沒有的新分類）：' + (r.stderr.strip().splitlines() or ['?'])[-1])
+            raise RuntimeError('產生簡報規格失敗（例如資料出現原簡報沒有的新分類）：' + (r.stderr.strip().splitlines() or ['?'])[-1])
         r = run('rebuild.py', 'build', spec, pptx)
         print(r.stdout); print(r.stderr, file=sys.stderr)
         if r.returncode:
@@ -43,3 +43,4 @@ for y in sorted(years):
 import time
 json.dump({'years': ok, 'failed': failed, 'built': int(time.time())}, open(os.path.join(out, 'index.json'), 'w', encoding='utf-8'), ensure_ascii=False)
 print('完成：', ok, '失敗：', failed)
+sys.exit(1 if failed else 0)  # 有年度失敗時讓 Actions 顯示紅字提醒（網站仍會照常部署）
