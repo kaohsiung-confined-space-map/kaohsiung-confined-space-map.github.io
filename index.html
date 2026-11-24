@@ -458,7 +458,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 /* ---------- 各區頁面 ---------- */
 function violationPage(pg, p) {
   const l1 = card(pg, [40, 200, 340, 380], 0); pie(l1, toChart(p['場次分布']), { r: 100, title: '場次分布', small: true, unit: '場' });
-  const l2 = card(pg, [40, 610, 340, 380], 70); pie(l2, toChart(p['違規公司分布']), { r: 100, title: '違規公司分布', small: true, unit: '家' });
+  const l2 = card(pg, [40, 610, 340, 380], 70); pie(l2, toChart(p['違規公司分布']), { r: 100, title: '違規公司分布', small: true, unit: '場' });
   const m1 = card(pg, [420, 210, 520, 760], 140); pie(m1, toChart(p['假日違規']), { r: 225, title: '假日違規', unit: '場' });
   const m2 = card(pg, [960, 210, 520, 760], 210); pie(m2, toChart(p['非假日違規']), { r: 225, title: '非假日違規', unit: '場' });
 }

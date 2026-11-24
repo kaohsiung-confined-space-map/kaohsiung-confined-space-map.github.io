@@ -4,6 +4,8 @@
    - 一列 = 一場次。總場次 = 該區列數。
    - 是否假日：以 Excel 欄位為準（只接受「假日／非假日」）；另與政府辦公日曆表比對，不一致只提醒、不修改。
    - 缺失項目：連續數字為一個項次，其他符號（空白 . 、 。 ， 等）只是分隔；「無」或「0」= 無違規。
+     全形數字、全形標點先轉成半形；「1-5」「1~5」這類範圍寫法列為錯誤（避免被讀成第 1、5 項）。
+   - 局限空間地點、類型、行業別：名稱中間的空白不算；不在原有分類中的名稱會提醒（可能是打錯字）。
      項次需在 1～16；同格重複的項次只算一次。空白或無法判讀的格子是錯誤。
      以數字格式儲存的格子：小數部分為「1」者（如 2.1）可能原為 2.10，列為錯誤；其餘照數字讀。
    - 違規分級（以不重複項次數計）：5 項以上／小於 5 項（1～4）／無違規。
@@ -76,12 +78,13 @@
       return checkNums(nums, raw, true);
     }
     if (c.t !== 's') return { error: '缺失項目格式無法判讀' };
-    const s = norm(c.v);
+    const s = norm(c.v).normalize('NFKC');          // 全形數字、全形標點 → 半形
     if (s === '無' || /^0+$/.test(s)) return { items: [], none: true };
     if (s.includes('無')) return { error: `同一格同時有「無」與其他內容「${s}」` };
     const nums = (s.match(/\d+/g) || []).map(Number);
     if (!nums.length) return { error: `沒有可判讀的項次「${s}」` };
-    if (/[^\d\s.,、。，．;；:：\/\-]/.test(s)) return { error: `含有非分隔符號的文字「${s}」` };
+    if (/\d\s*[-~－～—–]\s*\d/.test(s)) return { error: `看起來是範圍寫法「${s}」，請逐項列出（例如 1、2、3、4、5）` };
+    if (/[^\d\s.,、。，．;；:：\/]/.test(s)) return { error: `含有非分隔符號的文字「${s}」` };
     return checkNums(nums, s, false);
   }
   function checkNums(nums, text, fromNumber) {
@@ -136,7 +139,7 @@
       r.holiday = cellText(get('holiday'));
       if (r.holiday !== '假日' && r.holiday !== '非假日') err(rn, '是否假日', '只能填「假日」或「非假日」', r.holiday);
       for (const k of ['place', 'type', 'industry']) {
-        r[k] = cellText(get(k));
+        r[k] = cellText(get(k)).replace(/\s/g, '');            // 分類名稱中間的空白不算
         if (!r[k]) err(rn, COLS.find(c => c[0] === k)[2], '空白');
       }
       const it = parseItems(get('items'));
@@ -180,6 +183,9 @@
     // ---- 統計 ----
     const seen = { place: new Set(), industry: new Set(), type: new Set() };
     for (const r of rows) for (const k in seen) seen[k].add(r[k]);
+    const colName = { place: '局限空間地點', industry: '行業別', type: '局限空間類型' };
+    for (const k in seen) for (const v of seen[k]) if (v !== '其他' && !ORDER[k].includes(v))
+      warnings.push({ row: rows.filter(r => r[k] === v).map(r => r.row).join('、'), col: colName[k], msg: `「${v}」不是原本的分類，會成為一個新類別；如果是打錯字，請修正後重新上傳`, val: v });
     const cats = { place: orderCats('place', seen.place), industry: orderCats('industry', seen.industry), type: orderCats('type', seen.type) };
     const zero = list => Object.fromEntries(list.map(k => [k, 0]));
     const blank = () => ({
