@@ -135,6 +135,10 @@
   .yearCard .m { margin-top: 18px; font-size: 26px; color: var(--ink-2); line-height: 1.6; }
   .yearCard .m b { color: #fff; }
   #yearMsg { font-size: 26px; color: #ffb3b3; min-height: 1em; }
+  #uploadLink { position: absolute; right: 48px; bottom: 36px; font-size: 22px; color: var(--ink-3); text-decoration: none; border-bottom: 1px dashed rgba(255,255,255,.35); }
+  #uploadLink:hover { color: #fff; }
+  #previewBar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 60; background: #c00000; color: #fff; font-size: 24px; font-weight: 700; text-align: center; padding: 6px; display: none; }
+  body.preview #previewBar { display: block; }
   #yearBadge { position: absolute; left: 584px; top: 44px; font: 700 26px var(--font); color: #fff; background: rgba(255,255,255,.1);
                border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 8px 22px; cursor: pointer; transition: opacity .4s, background .2s; }
   #yearBadge:hover { background: rgba(255,192,0,.3); }
@@ -195,6 +199,7 @@
     <div class="sub">選一個年度查看該年的局限空間工程分布</div>
     <div id="yearList"></div>
     <div id="yearMsg"></div>
+    <a id="uploadLink" href="upload.html">上傳新年度資料（管理者）</a>
   </section>
   <button id="yearBadge" title="切換年度"></button>
 
@@ -206,6 +211,7 @@
   </section>
 
   <div id="tip"></div>
+  <div id="previewBar">預覽模式：這份資料尚未發布，只有你這個瀏覽器看得到</div>
 </div></div>
 
 <script>
@@ -457,8 +463,18 @@ function violationPage(pg, p) {
   const m2 = card(pg, [960, 210, 520, 760], 210); pie(m2, toChart(p['非假日違規']), { r: 225, title: '非假日違規', unit: '場' });
 }
 function sitePage(pg, p) {
-  const a = card(pg, [60, 210, 640, 820], 0); pie(a, toChart(p['局限空間地點']), { r: 230, title: '局限空間地點', cols2: true, unit: '場' });
-  const b = card(pg, [760, 210, 720, 820], 90); pie(b, toChart(p['行業別']), { r: 230, title: '行業別（以委託廠商為主）', cols2: true, unit: '場' });
+  const extra = ['局限空間類型', '是否偏遠'].filter(k => p[k]);
+  if (!extra.length) {
+    const a = card(pg, [60, 210, 640, 820], 0); pie(a, toChart(p['局限空間地點']), { r: 230, title: '局限空間地點', cols2: true, unit: '場' });
+    const b = card(pg, [760, 210, 720, 820], 90); pie(b, toChart(p['行業別']), { r: 230, title: '行業別（以委託廠商為主）', cols2: true, unit: '場' });
+    return;
+  }
+  const a = card(pg, [30, 210, 560, 820], 0); pie(a, toChart(p['局限空間地點']), { r: 195, title: '局限空間地點', cols2: true, unit: '場' });
+  const b = card(pg, [600, 210, 640, 820], 90); pie(b, toChart(p['行業別']), { r: 195, title: '行業別（以委託廠商為主）', cols2: true, unit: '場' });
+  extra.forEach((k, i) => {
+    const c = card(pg, [1262, 420 + i * 320, 300, 300], 180 + i * 70);
+    pie(c, toChart(p[k]), { r: 80, title: k, small: true, unit: '場' });
+  });
 }
 function buildDetail(x) {
   $('#dTitle').textContent = x.name;
@@ -491,29 +507,30 @@ function buildSummary() {
   const p3 = h('div', 'page', box);
   const cb = card(p3, [40, 200, 1180, 830], 0);
   h('div', 'chartTitle', cb, '缺失項目統計');
-  const bars = S.items, max = Math.max(1, ...bars.map(b => b.v)), W = 1160, H = 640, bw = W / bars.length;
+  const bars = S.items, max = Math.max(1, ...bars.map(b => b.v)), W = 1160, H = 640, L = 44, bw = (W - L) / bars.length;
   const step = Math.max(1, Math.ceil(max / 6 / 5) * 5), top = Math.ceil(max / step) * step;
   const svg = el('svg', { width: W, height: H + 70, viewBox: `0 0 ${W} ${H + 70}` }); cb.appendChild(svg);
-  for (let g = 0; g <= top; g += step) { const y = H - g / top * (H - 40); el('line', { x1: 0, x2: W, y1: y, y2: y, stroke: 'rgba(255,255,255,.14)' }, svg); el('text', { x: 0, y: y - 6, fill: 'rgba(255,255,255,.5)', 'font-size': 18 }, svg).textContent = g; }
+  for (let g = 0; g <= top; g += step) { const y = H - g / top * (H - 40); el('line', { x1: L, x2: W, y1: y, y2: y, stroke: 'rgba(255,255,255,.14)' }, svg); el('text', { x: 0, y: y - 6, fill: 'rgba(255,255,255,.5)', 'font-size': 18 }, svg).textContent = g; }
   bars.forEach((b, i) => {
-    const bh = b.v / top * (H - 40), x = i * bw + bw * .18, w = bw * .64, top_ = b.v === max;
+    const bh = b.v / top * (H - 40), x = L + i * bw + bw * .18, w = bw * .64, top_ = b.v === max;
     const r = el('path', { d: `M${x} ${H} V${H - bh + 4} Q${x} ${H - bh} ${x + 4} ${H - bh} H${x + w - 4} Q${x + w} ${H - bh} ${x + w} ${H - bh + 4} V${H}Z`, fill: top_ ? '#ffc000' : '#ed7d31' }, svg);
-    r.addEventListener('mousemove', e => showTip(e, `${b.name === '無/空白' ? '無／空白' : '缺失' + b.name}<br><b>${b.v}</b> 次`)); r.addEventListener('mouseleave', hideTip);
+    r.addEventListener('mousemove', e => showTip(e, `${/\d/.test(b.name) ? '缺失' + b.name : '無違規'}<br><b>${b.v}</b> ${/\d/.test(b.name) ? '次' : '場'}`)); r.addEventListener('mouseleave', hideTip);
     el('text', { x: x + w / 2, y: H - bh - 10, 'text-anchor': 'middle', fill: '#fff', 'font-size': 22, 'font-weight': 700 }, svg).textContent = b.v;
-    el('text', { x: x + w / 2, y: H + 32, 'text-anchor': 'middle', fill: 'rgba(255,255,255,.8)', 'font-size': 20 }, svg).textContent = b.name.replace('第', '').replace('項', '').replace('無/空白', '無');
+    el('text', { x: x + w / 2, y: H + 32, 'text-anchor': 'middle', fill: 'rgba(255,255,255,.8)', 'font-size': 20 }, svg).textContent = b.name.replace('第', '').replace('項', '').replace('無/空白', '無');  // 無 = 無違規場次
   });
-  el('text', { x: W / 2, y: H + 64, 'text-anchor': 'middle', fill: 'rgba(255,255,255,.6)', 'font-size': 20 }, svg).textContent = '缺失項目（項次）';
+  el('text', { x: L + (W - L) / 2, y: H + 64, 'text-anchor': 'middle', fill: 'rgba(255,255,255,.6)', 'font-size': 20 }, svg).textContent = '缺失項目（項次）';
   const tb = card(p3, [1260, 400, 600, 640], 90);
   const real = bars.filter(b => /\d/.test(b.name));
-  const most = real.reduce((a, b) => b.v > a.v ? b : a), least = real.reduce((a, b) => b.v < a.v ? b : a);
+  const hi = Math.max(...real.map(b => b.v)), lo = Math.min(...real.map(b => b.v));
+  const names = v => real.filter(b => b.v === v).map(b => esc(b.name)).join('、');
   const n = h('div', 'note', tb);
-  h('div', '', n, `缺失最多項目<b>${esc(most.name)}</b>`); h('div', '', n, `缺失最少項目<b>${esc(least.name)}</b>`);
+  h('div', '', n, `缺失最多項目<b>${names(hi)}</b>（${hi} 次）`); h('div', '', n, `缺失最少項目<b>${names(lo)}</b>（${lo} 次）`);
   n.style.flexDirection = 'column'; n.style.marginTop = '0';
   tabs.push('缺失項目統計');
   }
   if (S.companies && S.companies.length) {
   const p4 = h('div', 'page', box);
-  const tc = card(p4, [40, 190, 1690, 860], 0);
+  const tc = card(p4, [40, 190, 1480, 860], 0);
   const sc = h('div', 'scroll', tc);
   const rows = S.companies;
   sc.innerHTML = `<table class="tbl"><thead><tr><th>承攬廠商</th><th style="width:220px;text-align:right">缺失項次總數</th><th style="width:640px">缺失項目（項次）</th></tr></thead><tbody>${
@@ -545,7 +562,12 @@ async function showYears() {
 }
 (async function init() {
   try {
-    [MAP, { years: YEARS }] = await Promise.all([getJSON('map.json'), getJSON('data/years.json')]);
+    let preview = null;
+    if (location.hash === '#preview') { try { preview = JSON.parse(sessionStorage.getItem('kmapPreview')); } catch (e) {} }
+    if (preview) {
+      MAP = await getJSON('map.json'); YEARS = [preview.year]; yearCache[preview.year] = preview;
+      document.body.classList.add('preview'); $('#uploadLink').style.display = 'none';
+    } else [MAP, { years: YEARS }] = await Promise.all([getJSON('map.json'), getJSON('data/years.json')]);
     YEARS.sort((a, b) => b - a);
     const ys = [...YEARS].sort((a, b) => a - b);
     $('#coverYears').textContent = ys.length === 1 ? `中華民國 ${ys[0]} 年` : `中華民國 ${ys[0]}–${ys[ys.length - 1]} 年`;

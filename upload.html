@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上傳年度資料｜高雄市局限空間工程分布統計</title>
+<style>
+  :root { --ink: #fff; --ink2: rgba(255,255,255,.78); --ink3: rgba(255,255,255,.55); --line: rgba(255,255,255,.22);
+          --ok: #70ad47; --bad: #ff6b6b; --warn: #ffc000; --font: "Microsoft JhengHei", "微軟正黑體", "PingFang TC", "Noto Sans TC", sans-serif; }
+  * { box-sizing: border-box; min-width: 0; }
+  html { background: #000; }
+  body { margin: 0; min-height: 100vh; font: 17px/1.6 var(--font); color: var(--ink); background: linear-gradient(180deg, #203864 0, #000 1000px) no-repeat; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+  a { color: #9dc3ff; }
+  h1 { font-size: 34px; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+  .step { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #ed7d31; font-size: 17px; }
+  .sub { color: var(--ink2); margin: 0 0 24px; }
+  .box { background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin: 18px 0; }
+  label.f { display: block; font-weight: 700; margin-bottom: 6px; }
+  input[type=number], input[type=password] { font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0,0,0,.35); color: #fff; width: 200px; }
+  input[type=password] { width: 100%; max-width: 560px; }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end; }
+  #drop { flex: 1 1 360px; border: 2px dashed rgba(255,255,255,.35); border-radius: 12px; padding: 22px; text-align: center; cursor: pointer; color: var(--ink2); }
+  #drop.over { border-color: var(--warn); background: rgba(255,192,0,.08); }
+  #drop b { color: #fff; }
+  button { font: 700 18px var(--font); padding: 11px 22px; border-radius: 10px; border: 0; cursor: pointer; background: #ed7d31; color: #fff; min-height: 44px; }
+  button.secondary { background: transparent; border: 1px solid rgba(255,255,255,.45); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, #drop:focus-visible { outline: 3px solid var(--warn); outline-offset: 2px; }
+  .banner { border-radius: 10px; padding: 14px 18px; font-weight: 700; margin-bottom: 16px; }
+  .banner.bad { background: rgba(255,107,107,.16); border: 1px solid var(--bad); }
+  .banner.ok { background: rgba(112,173,71,.18); border: 1px solid var(--ok); }
+  .banner.info { background: rgba(255,255,255,.08); border: 1px solid var(--line); font-weight: 400; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: rgba(0,0,0,.3); position: sticky; top: 0; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  details { margin-top: 14px; } summary { cursor: pointer; font-weight: 700; }
+  .tag { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 14px; font-weight: 700; }
+  .tag.bad { background: var(--bad); color: #000; } .tag.warn { background: var(--warn); color: #000; } .tag.info { background: rgba(255,255,255,.25); }
+  .muted { color: var(--ink3); font-size: 15px; }
+  ol.how { margin: 8px 0 14px; padding-left: 22px; color: var(--ink2); } ol.how li { margin: 3px 0; }
+  code { background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 5px; }
+  #log { white-space: pre-wrap; font-size: 15px; color: var(--ink2); margin-top: 10px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 600px) { th, td { padding: 6px; font-size: 13px; } h1 { font-size: 26px; } }
+</style>
+</head>
+<body>
+<main>
+  <a href="./">← 回到地圖</a>
+  <h1>上傳年度資料</h1>
+  <p class="sub">選擇民國年與 Excel 檔後，網站會在你的瀏覽器裡讀取「精準輔導」工作表並計算統計。<b>Excel 檔本身不會上傳到任何地方</b>，聯絡人、執行人、缺失內容等欄位也不會讀取；發布時只會把統計數字存到網站。</p>
+
+  <section class="box">
+    <h2><span class="step">1</span>選擇年度與檔案</h2>
+    <div class="row">
+      <div>
+        <label class="f" for="year">民國年</label>
+        <input id="year" type="number" min="100" max="200" step="1" placeholder="例如 115" inputmode="numeric">
+      </div>
+      <div id="drop" tabindex="0" role="button" aria-label="選擇 Excel 檔">
+        <b>點這裡選擇 Excel 檔</b>，或把檔案拖曳到這裡<br><span class="muted" id="fname">只接受 .xlsx</span>
+      </div>
+      <input id="file" type="file" accept=".xlsx" hidden>
+    </div>
+  </section>
+
+  <section class="box" id="result" hidden>
+    <h2><span class="step">2</span>檢查結果</h2>
+    <div id="banner"></div>
+    <div id="issues"></div>
+    <div id="previewWrap" hidden>
+      <h2 style="margin-top:22px">統計預覽</h2>
+      <div class="scroll"><table id="preview"></table></div>
+      <p style="margin-top:14px"><button class="secondary" id="mapPreview">在地圖上預覽（新分頁）</button></p>
+    </div>
+  </section>
+
+  <section class="box" id="publish" hidden>
+    <h2><span class="step">3</span>發布到網站</h2>
+    <div id="overwrite"></div>
+    <p class="muted">發布需要 GitHub 金鑰（只需設定一次，每次發布時貼上）。金鑰只用在這次發布，不會存在網站上。</p>
+    <details>
+      <summary>如何取得 GitHub 金鑰</summary>
+      <ol class="how">
+        <li>用管理者帳號登入 GitHub，開啟 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">建立 Fine-grained token</a>。</li>
+        <li>Token name 隨意（例如「地圖上傳」），Expiration 依需要設定。</li>
+        <li><b>Resource owner</b> 選 <code id="ownerName">kaohsiung-confined-space-map</code>。</li>
+        <li><b>Repository access</b> 選「Only select repositories」，只勾 <code id="repoName"></code>。</li>
+        <li><b>Permissions → Repository permissions → Contents</b> 設為「Read and write」，其他不用動。</li>
+        <li>按 Generate token，複製產生的金鑰貼到下方。若 GitHub 顯示需要組織核准，請到組織設定的「Personal access tokens → Pending requests」核准。</li>
+      </ol>
+    </details>
+    <label class="f" for="token" style="margin-top:12px">GitHub 金鑰</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+    <p style="margin-top:14px"><button id="go">發布 <span id="goYear"></span> 年資料</button></p>
+    <div id="log" role="status"></div>
+  </section>
+</main>
+
+<script src="xlsx.js"></script>
+<script src="stats.js"></script>
+<script>
+{
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const host = location.hostname.endsWith('.github.io') ? location.hostname : 'kaohsiung-confined-space-map.github.io';
+  const OWNER = host.split('.')[0];
+  const seg = location.pathname.split('/').filter(Boolean)[0];
+  const REPO = location.hostname.endsWith('.github.io') && seg && !seg.endsWith('.html') ? seg : host;
+  $('#ownerName').textContent = OWNER; $('#repoName').textContent = REPO;
+
+  let MAP, CAL, result = null, fileObj = null, existing = [];
+  const ready = Promise.all([
+    fetch('map.json', { cache: 'no-cache' }).then(r => r.json()),
+    fetch('calendar.json', { cache: 'no-cache' }).then(r => r.json()),
+    fetch('data/years.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : { years: [] }).catch(() => ({ years: [] })),
+  ]).then(([m, c, y]) => { MAP = m; CAL = c; existing = y.years || []; });
+
+  const drop = $('#drop'), file = $('#file');
+  drop.onclick = () => file.click();
+  drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); };
+  file.onchange = () => file.files[0] && pick(file.files[0]);
+  $('#year').oninput = () => fileObj && run();
+
+  function pick(f) { fileObj = f; $('#fname').textContent = f.name; run(); }
+
+  async function run() {
+    await ready;
+    const roc = +$('#year').value;
+    $('#result').hidden = false; $('#publish').hidden = true; $('#previewWrap').hidden = true; $('#issues').innerHTML = '';
+    if (!(roc >= 100 && roc <= 200 && Number.isInteger(roc))) { $('#banner').innerHTML = '<div class="banner bad">請先填寫正確的民國年（例如 115）</div>'; return; }
+    if (!/\.xlsx$/i.test(fileObj.name)) { $('#banner').innerHTML = '<div class="banner bad">只接受 .xlsx 檔（若是 .xls 或 .ods，請用 Excel 另存為 .xlsx）</div>'; return; }
+    $('#banner').innerHTML = '<div class="banner info">讀取中…</div>';
+    try {
+      const wb = await XLSXLite.readXlsx(await fileObj.arrayBuffer());
+      result = MapStats.analyze(wb, roc, CAL, MAP.districts.map(d => d.name));
+    } catch (e) {
+      $('#banner').innerHTML = `<div class="banner bad">無法讀取這個檔案：${esc(e.message)}</div>`; return;
+    }
+    render(roc);
+  }
+
+  function issueTable(list, kind, title) {
+    if (!list.length) return '';
+    const label = { bad: '錯誤', warn: '需要注意', info: '說明' }[kind];
+    const body = list.map(i => `<tr><td class="n">${esc(i.row)}</td><td>${esc(i.col)}</td><td>${esc(i.msg)}</td><td>${esc(i.val ?? '')}</td></tr>`).join('');
+    return `<details ${kind !== 'info' ? 'open' : ''}><summary><span class="tag ${kind}">${label}</span> ${title}（${list.length}）</summary>
+      <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="n">Excel 列</th><th>欄位</th><th>說明</th><th>內容</th></tr></thead><tbody>${body}</tbody></table></div></details>`;
+  }
+
+  function render(roc) {
+    const r = result;
+    const nErr = r.errors.length;
+    $('#banner').innerHTML = nErr
+      ? `<div class="banner bad">有 ${nErr} 個錯誤，必須先修正 Excel 再重新選擇檔案，才能發布。${r.rows ? `（已讀到 ${r.rows} 筆資料）` : ''}</div>`
+      : `<div class="banner ok">檢查通過：共 ${r.rows} 筆場次。${r.warnings.length ? `另有 ${r.warnings.length} 項需要注意，不影響統計，請確認後再發布。` : ''}</div>`;
+    $('#issues').innerHTML = issueTable(r.errors, 'bad', '必須修正') + issueTable(r.warnings, 'warn', '請確認是否正確') + issueTable(r.notes, 'info', '讀取方式說明');
+    if (nErr) return;
+
+    const D = r.data.districts, S = r.data.summary;
+    const head = ['行政區', '總場次', '假日', '非假日', '有違規', '五項以上', '無違規', '偏遠'];
+    const line = (name, d) => {
+      const c = d.charts || {};
+      const v = (k, cat) => (c[k] && c[k][cat]) || 0;
+      const vio = v('違規公司分布', '假日') + v('違規公司分布', '非假日');
+      const five = v('假日違規', '五項以上') + v('非假日違規', '五項以上');
+      return `<tr><td>${esc(name)}</td><td class="n">${d.total}</td><td class="n">${v('場次分布', '假日')}</td><td class="n">${v('場次分布', '非假日')}</td><td class="n">${vio}</td><td class="n">${five}</td><td class="n">${v('違規公司分布', '無違規')}</td><td>${d.remote === true ? '是' : d.remote === false ? '否' : '—'}</td></tr>`;
+    };
+    const rows = MAP.districts.map(d => d.name).filter(n => D[n].total).sort((a, b) => D[b].total - D[a].total);
+    const none = MAP.districts.map(d => d.name).filter(n => !D[n].total);
+    $('#preview').innerHTML = `<thead><tr>${head.map((h, i) => `<th class="${i ? 'n' : ''}">${h}</th>`).join('')}</tr></thead><tbody>
+      ${line('全區', { total: S.total, charts: S.charts, remote: null }).replace('<td>全區</td>', '<td><b>全區</b></td>')}
+      ${rows.map(n => line(n, D[n])).join('')}
+      <tr><td colspan="8" class="muted">無資料（地圖上會亮灰白色）：${none.length ? esc(none.join('、')) : '無'}</td></tr></tbody>`;
+    $('#previewWrap').hidden = false;
+    $('#mapPreview').onclick = () => {
+      sessionStorage.setItem('kmapPreview', JSON.stringify(r.data));
+      window.open('./#preview', '_blank');
+    };
+    $('#publish').hidden = false;
+    $('#goYear').textContent = roc;
+    $('#overwrite').innerHTML = existing.includes(roc)
+      ? `<div class="banner bad">網站上已經有 ${roc} 年的資料，發布後會<b>覆蓋</b>舊資料。</div>` : '';
+    $('#log').textContent = '';
+  }
+
+  /* ---- 發布：只把統計結果 JSON 寫進 repo ---- */
+  const api = (path, opt = {}) => fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}`, {
+    ...opt, headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${$('#token').value.trim()}`, 'X-GitHub-Api-Version': '2022-11-28', ...(opt.headers || {}) },
+  });
+  const b64 = s => { const u = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(bin); };
+  async function shaOf(path) {
+    const r = await api(path + '?ref=main');
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(`讀取 ${path} 失敗（${r.status}）`);
+    return (await r.json()).sha;
+  }
+  async function put(path, text, msg) {
+    const sha = await shaOf(path);
+    const r = await api(path, { method: 'PUT', body: JSON.stringify({ message: msg, content: b64(text), branch: 'main', ...(sha ? { sha } : {}) }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(`寫入 ${path} 失敗（${r.status}）：${j.message || ''}`); }
+  }
+  $('#go').onclick = async () => {
+    const roc = +$('#year').value, log = $('#log');
+    if (!result || result.errors.length) return;
+    if (!$('#token').value.trim()) { log.textContent = '請先貼上 GitHub 金鑰。'; return; }
+    if (existing.includes(roc) && !confirmOverwrite(roc)) return;
+    $('#go').disabled = true;
+    try {
+      log.textContent = '檢查金鑰權限…';
+      const t = await api('data/years.json?ref=main');
+      if (t.status === 401) throw new Error('金鑰無效或已過期');
+      if (t.status === 403 || t.status === 404) throw new Error('金鑰沒有這個 repo 的存取權限，請確認 Resource owner、Repository access 與 Contents 權限');
+      log.textContent = `寫入 data/${roc}.json…`;
+      const data = { ...result.data, generated: new Date().toISOString(), sourceFile: fileObj.name };
+      await put(`data/${roc}.json`, JSON.stringify(data), `更新 ${roc} 年統計資料（網站上傳）`);
+      log.textContent = '更新年度清單…';
+      const cur = t.ok ? JSON.parse(decodeURIComponent(escape(atob((await t.json()).content.replace(/\n/g, ''))))) : { years: [] };
+      const years = [...new Set([...(cur.years || []), roc])].sort((a, b) => a - b);
+      if (years.length !== (cur.years || []).length) await put('data/years.json', JSON.stringify({ years }), `加入 ${roc} 年`);
+      existing = years;
+      log.innerHTML = `<b style="color:#9be07a">發布完成。</b>GitHub 大約需要 1 分鐘更新網站，之後 <a href="./">回到地圖</a> 重新整理就會看到 ${roc} 年。`;
+      $('#token').value = '';
+    } catch (e) { log.textContent = '發布失敗：' + e.message; }
+    $('#go').disabled = false;
+  };
+  // 不用瀏覽器內建 confirm（某些環境會被擋），改用頁面上的二次確認
+  let armed = 0;
+  function confirmOverwrite(roc) {
+    if (Date.now() - armed < 8000) return true;
+    armed = Date.now(); $('#log').textContent = `${roc} 年資料已存在。8 秒內再按一次「發布」即確認覆蓋。`; return false;
+  }
+}
+</script>
+</body>
+</html>
