@@ -1,0 +1,44 @@
+# 每次 main 有更新（包含上傳頁發布新年度資料）：
+# 1. 依各年度資料產生地圖簡報 PPTX，並逐項比對 PPT 內數字與網站資料，全部一致才提供下載
+# 2. 把網站（含 PPT）部署到 GitHub Pages
+name: 部署網站並產生 PPT
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 安裝套件
+        run: pip install lxml openpyxl
+      - name: 準備網站檔案
+        run: |
+          mkdir _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'tools' --exclude '_site' ./ _site/
+      - name: 產生並驗證各年度 PPT
+        continue-on-error: true
+        run: python3 tools/pptgen/make_pptx.py . _site/pptx
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
