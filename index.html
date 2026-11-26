@@ -146,6 +146,29 @@
   .yearCard .flagTip ul { margin: 0; padding-left: 24px; }
   .yearCard .flagTip li { margin: 3px 0; }
   .yearCard .flag:hover + .flagTip, .yearCard .flag:focus + .flagTip { opacity: 1; visibility: visible; }
+  /* 刪除：方格左上角的垃圾桶 */
+  .yearCard .del { position: absolute; top: 14px; left: 14px; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; color: rgba(255,255,255,.6); cursor: pointer; z-index: 3; transition: background .15s, color .15s; }
+  .yearCard .del svg { width: 30px; height: 30px; }
+  .yearCard .del:hover, .yearCard .del:focus-visible { background: rgba(255,90,90,.22); color: #ff8a8a; outline: none; }
+  body.preview .yearCard .del { display: none; }
+  .yearCard .y .sfx { font-size: 40px; color: #ffc000; margin-left: 4px; }
+  #delModal { position: absolute; inset: 0; z-index: 80; background: rgba(0,0,0,.6); display: grid; place-items: center; }
+  #delModal[hidden] { display: none; }
+  #delModal .dlg { width: 760px; background: #1d2b4a; border: 2px solid #ff6b6b; border-radius: 22px; padding: 36px 40px 32px; box-shadow: 0 24px 70px rgba(0,0,0,.7); font-size: 26px; line-height: 1.55; }
+  #delModal h3 { margin: 0 0 14px; font-size: 36px; display: flex; align-items: center; gap: 14px; }
+  #delModal h3 svg { width: 40px; height: 40px; color: #ff6b6b; flex: none; }
+  #delModal p { margin: 0 0 12px; color: var(--ink-2); }
+  #delModal p b { color: #ff8a8a; }
+  #delModal label { display: block; margin-top: 18px; font-size: 22px; color: var(--ink-2); }
+  #delModal input { width: 100%; margin-top: 8px; padding: 12px 16px; font: 22px monospace; color: #fff; background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.35); border-radius: 10px; user-select: text; }
+  #delModal .hint { font-size: 19px; color: var(--ink-3); margin-top: 6px; }
+  #delModal .btns { display: flex; justify-content: flex-end; gap: 18px; margin-top: 26px; }
+  #delModal button { font: 700 24px var(--font); padding: 12px 30px; border-radius: 12px; cursor: pointer; border: 1px solid rgba(255,255,255,.4); background: transparent; color: #fff; }
+  #delModal button:hover { background: rgba(255,255,255,.12); }
+  #delModal button.danger { background: #c62828; border-color: #ff6b6b; }
+  #delModal button.danger:hover { background: #e53935; }
+  #delModal button:disabled { opacity: .5; cursor: default; }
+  #delLog { min-height: 1.4em; margin-top: 14px; font-size: 22px; color: #ffd27a; white-space: pre-wrap; }
   .yearItem { display: flex; flex-direction: column; align-items: center; gap: 16px; }
   .yearDl { font-size: 24px; color: #ffc000; text-decoration: none; border: 1px solid rgba(255,192,0,.6); border-radius: 999px; padding: 6px 24px; display: inline-flex; align-items: center; gap: 8px; }
   .yearDl:hover, .yearDl:focus-visible { background: rgba(255,192,0,.16); color: #fff; outline: none; }
@@ -225,12 +248,27 @@
     <div class="go">點一下進入地圖</div>
   </section>
 
+  <div id="delModal" hidden role="dialog" aria-modal="true" aria-labelledby="delTitle">
+    <div class="dlg">
+      <h3 id="delTitle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="delTitleText"></span></h3>
+      <p>刪除後<b>無法復原</b>：網站上這份地圖的統計資料與可下載的 PPT 都會一起移除。</p>
+      <label for="delToken">GitHub 金鑰（與上傳頁使用的相同）</label>
+      <input id="delToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+      <div class="hint">金鑰只用於這次刪除，不會被儲存。</div>
+      <div id="delLog" role="status"></div>
+      <div class="btns"><button id="delCancel">取消</button><button id="delGo" class="danger">確定刪除</button></div>
+    </div>
+  </div>
   <div id="tip"></div>
   <div id="previewBar">預覽模式：這份資料尚未發布，只有你這個瀏覽器看得到</div>
 </div></div>
 
 <script>
 let MAP, YEAR, YEARS = [];
+/* 年度代號：114、115，或同一年的另一份地圖 115_1、115_2… */
+const idYear = id => parseInt(id, 10);
+const idSfx = id => { const m = String(id).match(/_(\d+)$/); return m ? +m[1] : 0; };
+const idSort = (a, b) => idYear(b) - idYear(a) || idSfx(a) - idSfx(b);
 const K = 1920 / 12192;               // 投影片 EMU/1000 → 畫布像素
 const $ = s => document.querySelector(s);
 const NS = 'http://www.w3.org/2000/svg';
@@ -296,7 +334,7 @@ function applyYear(Y) {
     x.hi.setAttribute('filter', x.bevel ? 'url(#bevel)' : '');
     x.btnEl.dataset.fill = cssGradient(x.has ? MAP.styles.btnData : MAP.styles.btnNone);
   });
-  $('#yearBadge').textContent = `${Y.year} 年度　切換年度 ▸`;
+  $('#yearBadge').textContent = `${Y.year} 年度${Y.id && idSfx(Y.id) ? '_' + idSfx(Y.id) : ''}　切換年度 ▸`;
   buildSummary();
 }
 
@@ -323,6 +361,7 @@ function setView(v) { view = v; document.body.dataset.view = v; hideTip(); }
 $('#cover').addEventListener('click', () => { if (view === 'cover') showYears(); });
 $('#yearBadge').addEventListener('click', () => { if (view === 'map') { clearLit(); showYears(); } });
 addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input, #delModal')) return;
   if (view === 'cover' && (e.key === 'Enter' || e.key === ' ')) showYears();
   else if (e.key === 'Escape' && (view === 'detail' || view === 'summary')) backToMap();
   else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') pageKey(e.key === 'ArrowRight' ? 1 : -1);
@@ -559,7 +598,7 @@ function buildSummary() {
 /* ---------- 年度清單與載入 ---------- */
 const yearCache = {};
 async function getJSON(url) { const r = await fetch(url, { cache: 'no-cache' }); if (!r.ok) throw new Error(url + ' ' + r.status); return r.json(); }
-async function loadYear(y) { return yearCache[y] || (yearCache[y] = await getJSON(`data/${y}.json`)); }
+async function loadYear(y) { return yearCache[y] || (yearCache[y] = Object.assign(await getJSON(`data/${y}.json`), { id: y })); }
 async function showYears() {
   setView('years');
   const list = $('#yearList'); list.innerHTML = '';
@@ -569,14 +608,19 @@ async function showYears() {
     const item = h('div', 'yearItem', list);
     const b = h('button', 'yearCard', item);
     pptx.then(p => {
-      if (!(p.years || []).includes(y)) return;
+      if (!(p.years || []).map(String).includes(String(y))) return;
       const a = h('a', 'yearDl', item, '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>下載 PPT');
-      a.href = `pptx/${y}.pptx` + (p.built ? `?v=${p.built}` : ''); a.download = `${y}年高雄市局限空間工程分布統計互動式地圖.pptx`;
+      a.href = `pptx/${y}.pptx` + (p.built ? `?v=${p.built}` : ''); a.download = `${idYear(y)}年高雄市局限空間工程分布統計互動式地圖${idSfx(y) ? '_' + idSfx(y) : ''}.pptx`;
     });
-    b.innerHTML = `<div class="y">${esc(y)}<small>年</small></div><div class="m">載入中…</div>`;
+    b.innerHTML = `<div class="y">${idYear(y)}<small>年</small>${idSfx(y) ? `<span class="sfx">_${idSfx(y)}</span>` : ''}</div><div class="m">載入中…</div>`;
+    const del = h('span', 'del', b, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    del.setAttribute('role', 'button'); del.tabIndex = 0; del.title = '刪除這份地圖';
+    del.setAttribute('aria-label', `刪除 ${idLabel(y)} 年地圖`);
+    del.onclick = e => { e.stopPropagation(); e.preventDefault(); askDelete(y); };
+    del.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); askDelete(y); } };
     b.onclick = async () => {
       try { applyYear(await loadYear(y)); clearLit(); enterMap(); }
-      catch (e) { $('#yearMsg').textContent = `無法讀取 ${y} 年資料`; }
+      catch (e) { $('#yearMsg').style.color = ''; $('#yearMsg').textContent = `無法讀取 ${idLabel(y)} 年資料`; }
     };
     loadYear(y).then(Y => {
       const n = Object.values(Y.districts).filter(d => d.total > 0).length;
@@ -589,17 +633,83 @@ async function showYears() {
     }).catch(() => { b.querySelector('.m').textContent = '資料讀取失敗'; });
   }
 }
+function idLabel(y) { return idSfx(y) ? `${idYear(y)}_${idSfx(y)}` : `${idYear(y)}`; }
+function coverText() {
+  const ys = [...new Set(YEARS.map(idYear))].sort((a, b) => a - b);
+  $('#coverYears').textContent = !ys.length ? '尚無年度資料' : ys.length === 1 ? `中華民國 ${ys[0]} 年` : `中華民國 ${ys[0]}–${ys[ys.length - 1]} 年`;
+}
+/* ---------- 刪除年度地圖（透過 GitHub 金鑰直接改網站的 repo） ---------- */
+const GH = (() => {
+  const host = location.hostname.endsWith('.github.io') ? location.hostname : 'kaohsiung-confined-space-map.github.io';
+  const seg = location.pathname.split('/').filter(Boolean)[0];
+  return { owner: host.split('.')[0], repo: location.hostname.endsWith('.github.io') && seg && !seg.endsWith('.html') ? seg : host };
+})();
+let delTarget = null;
+function askDelete(y) {
+  delTarget = y;
+  $('#delTitleText').textContent = `確定要刪除 ${idLabel(y)} 年的地圖嗎？`;
+  $('#delToken').value = ''; $('#delLog').textContent = '';
+  $('#delGo').disabled = false; $('#delCancel').disabled = false;
+  $('#delModal').hidden = false; $('#delToken').focus();
+}
+function closeDelete() { $('#delModal').hidden = true; $('#delToken').value = ''; $('#delLog').textContent = ''; delTarget = null; }
+$('#delCancel').onclick = closeDelete;
+$('#delModal').addEventListener('click', e => { if (e.target.id === 'delModal' && !$('#delGo').disabled) closeDelete(); });
+$('#delModal').addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#delGo').disabled) closeDelete(); if (e.key === 'Enter' && e.target.id === 'delToken') $('#delGo').click(); });
+async function ghApi(path, token, opt = {}) {
+  return fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`, {
+    ...opt, headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(opt.headers || {}) },
+  });
+}
+const b64enc = s => { const u = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(bin); };
+const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
+$('#delGo').onclick = async () => {
+  const y = delTarget, token = $('#delToken').value.trim(), log = $('#delLog');
+  if (y == null) return;
+  if (!token) { log.textContent = '請先貼上 GitHub 金鑰。'; $('#delToken').focus(); return; }
+  $('#delGo').disabled = true; $('#delCancel').disabled = true;
+  try {
+    log.textContent = '檢查金鑰權限…';
+    const t = await ghApi('data/years.json?ref=main', token);
+    if (t.status === 401) throw new Error('金鑰無效或已過期');
+    if (t.status === 403 || t.status === 404) throw new Error('金鑰沒有這個網站的存取權限');
+    if (!t.ok) throw new Error(`讀取年度清單失敗（${t.status}）`);
+    const tj = await t.json(), cur = JSON.parse(b64dec(tj.content));
+    const list = cur.years || [];
+    // 1. 先把它從年度清單拿掉，網站就不會再去讀它
+    if (list.some(v => String(v) === String(y))) {
+      log.textContent = '更新年度清單…';
+      const years = list.filter(v => String(v) !== String(y));
+      const r = await ghApi('data/years.json', token, { method: 'PUT', body: JSON.stringify({ message: `刪除 ${idLabel(y)} 年地圖（年度清單）`, content: b64enc(JSON.stringify({ years })), sha: tj.sha, branch: 'main' }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(`更新年度清單失敗（${r.status}）${j.message ? '：' + j.message : ''}`); }
+    }
+    // 2. 刪除資料檔
+    log.textContent = `刪除 data/${y}.json…`;
+    const f = await ghApi(`data/${y}.json?ref=main`, token);
+    if (f.ok) {
+      const { sha } = await f.json();
+      const r = await ghApi(`data/${y}.json`, token, { method: 'DELETE', body: JSON.stringify({ message: `刪除 ${idLabel(y)} 年地圖（統計資料）`, sha, branch: 'main' }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(`刪除資料檔失敗（${r.status}）${j.message ? '：' + j.message : ''}`); }
+    } else if (f.status !== 404) throw new Error(`讀取資料檔失敗（${f.status}）`);
+    YEARS = YEARS.filter(v => String(v) !== String(y)); delete yearCache[y];
+    coverText(); closeDelete(); showYears();
+    $('#yearMsg').style.color = '#9be07a';
+    $('#yearMsg').textContent = `已刪除 ${idLabel(y)} 年地圖。GitHub 大約需要 1 分鐘更新網站，在那之前重新整理可能還會暫時看到它。`;
+  } catch (e) {
+    log.textContent = '刪除失敗：' + e.message;
+    $('#delGo').disabled = false; $('#delCancel').disabled = false;
+  }
+};
 (async function init() {
   try {
     let preview = null;
     if (location.hash === '#preview') { try { preview = JSON.parse(sessionStorage.getItem('kmapPreview')); } catch (e) {} }
     if (preview) {
-      MAP = await getJSON('map.json'); YEARS = [preview.year]; yearCache[preview.year] = preview;
+      MAP = await getJSON('map.json'); YEARS = [preview.year]; yearCache[preview.year] = Object.assign(preview, { id: preview.year });
       document.body.classList.add('preview'); $('#uploadLink').style.display = 'none';
     } else [MAP, { years: YEARS }] = await Promise.all([getJSON('map.json'), getJSON('data/years.json')]);
-    YEARS.sort((a, b) => b - a);
-    const ys = [...YEARS].sort((a, b) => a - b);
-    $('#coverYears').textContent = ys.length === 1 ? `中華民國 ${ys[0]} 年` : `中華民國 ${ys[0]}–${ys[ys.length - 1]} 年`;
+    YEARS.sort(idSort);
+    coverText();
     setupMap();
   } catch (e) {
     $('#coverYears').textContent = '資料讀取失敗，請重新整理';

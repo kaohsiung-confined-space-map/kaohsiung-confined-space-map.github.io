@@ -31,6 +31,7 @@
   .banner { border-radius: 10px; padding: 14px 18px; font-weight: 700; margin-bottom: 16px; }
   .banner.bad { background: rgba(255,107,107,.16); border: 1px solid var(--bad); }
   .banner.ok { background: rgba(112,173,71,.18); border: 1px solid var(--ok); }
+  .banner.warn { background: rgba(255,192,0,.14); border: 1px solid var(--warn); }
   .banner.info { background: rgba(255,255,255,.08); border: 1px solid var(--line); font-weight: 400; }
   table { border-collapse: collapse; width: 100%; font-size: 15px; }
   th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
@@ -46,12 +47,14 @@
   #log { white-space: pre-wrap; font-size: 15px; color: var(--ink2); margin-top: 10px; }
   [hidden] { display: none !important; }
   /* 可能有誤的提醒視窗 */
-  #flagModal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 50; padding: 16px; }
-  #flagModal .dlg { width: min(560px, 100%); background: #1d2b4a; border: 1px solid var(--warn); border-radius: 14px; padding: 20px 22px 18px; box-shadow: 0 18px 50px rgba(0,0,0,.6); }
-  #flagModal h3 { margin: 0 0 10px; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+  #flagModal, #dupModal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 50; padding: 16px; }
+  #flagModal .dlg, #dupModal .dlg { width: min(560px, 100%); background: #1d2b4a; border: 1px solid var(--warn); border-radius: 14px; padding: 20px 22px 18px; box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+  #flagModal h3, #dupModal h3 { margin: 0 0 10px; font-size: 20px; display: flex; align-items: center; gap: 8px; }
   #flagModal ul { margin: 0 0 8px; padding-left: 20px; font-size: 16px; color: var(--ink2); max-height: 50vh; overflow: auto; }
   #flagModal li { margin: 4px 0; }
-  #flagModal .btns { display: flex; gap: 12px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+  #flagModal .btns, #dupModal .btns { display: flex; gap: 12px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+  #dupModal p { margin: 0 0 6px; font-size: 16px; color: var(--ink2); line-height: 1.6; }
+  #dupModal code { color: #ffc000; }
   @media (max-width: 600px) { th, td { padding: 6px; font-size: 13px; } h1 { font-size: 26px; } }
 </style>
 </head>
@@ -113,6 +116,13 @@
     <ul id="flagList"></ul>
     <p class="muted" style="margin:0">這些不會擋住上傳；上傳後，年度選擇頁會標示這些疑慮。</p>
     <div class="btns"><button class="secondary" id="flagReupload">重新上傳</button><button id="flagGo">直接上傳</button></div>
+  </div>
+</div>
+<div id="dupModal" hidden role="dialog" aria-modal="true" aria-labelledby="dupTitle">
+  <div class="dlg">
+    <h3 id="dupTitle"></h3>
+    <p id="dupText"></p>
+    <div class="btns"><button class="secondary" id="dupCancel">取消</button><button class="secondary" id="dupCopy"></button><button id="dupOver"></button></div>
   </div>
 </div>
 <script src="xlsx.js"></script>
@@ -202,7 +212,7 @@
     $('#publish').hidden = false;
     $('#goYear').textContent = roc;
     $('#overwrite').innerHTML = existing.includes(roc)
-      ? `<div class="banner bad">網站上已經有 ${roc} 年的資料，發布後會<b>覆蓋</b>舊資料。</div>` : '';
+      ? `<div class="banner warn">網站上已經有 ${roc} 年的地圖。按「發布」後會請你選擇：覆蓋舊的地圖，或另存為新的一份（${roc}_1、${roc}_2…）。</div>` : '';
     $('#log').textContent = '';
     if (r.flags && r.flags.length) {
       $('#flagList').innerHTML = r.flags.map(f => `<li>${esc(f)}</li>`).join('');
@@ -237,31 +247,52 @@
     const roc = +$('#year').value, log = $('#log');
     if (!result || result.errors.length) return;
     if (!$('#token').value.trim()) { log.textContent = '請先貼上 GitHub 金鑰。'; return; }
-    if (existing.includes(roc) && !confirmOverwrite(roc)) return;
     $('#go').disabled = true;
     try {
       log.textContent = '檢查金鑰權限…';
       const t = await api('data/years.json?ref=main');
       if (t.status === 401) throw new Error('金鑰無效或已過期');
       if (t.status === 403 || t.status === 404) throw new Error('金鑰沒有這個 repo 的存取權限，請確認 Resource owner、Repository access 與 Contents 權限');
-      log.textContent = `寫入 data/${roc}.json…`;
-      const data = { ...result.data, generated: new Date().toISOString(), sourceFile: fileObj.name };
-      await put(`data/${roc}.json`, JSON.stringify(data), `更新 ${roc} 年統計資料（網站上傳）`);
-      log.textContent = '更新年度清單…';
       const cur = t.ok ? JSON.parse(decodeURIComponent(escape(atob((await t.json()).content.replace(/\n/g, ''))))) : { years: [] };
-      const years = [...new Set([...(cur.years || []), roc])].sort((a, b) => a - b);
-      if (years.length !== (cur.years || []).length) await put('data/years.json', JSON.stringify({ years }), `加入 ${roc} 年`);
+      const list = cur.years || [];
+      // 同一年已經有地圖：問要覆蓋舊的，還是另存為 115_1、115_2…
+      let id = roc;
+      if (list.some(v => String(v) === String(roc))) {
+        const n = Math.max(0, ...list.filter(v => idYear(v) === roc).map(idSfx)) + 1;
+        log.textContent = '';
+        const choice = await askDuplicate(roc, `${roc}_${n}`);
+        if (choice === 'cancel') { log.textContent = '已取消發布。'; $('#go').disabled = false; return; }
+        if (choice === 'copy') id = `${roc}_${n}`;
+      }
+      log.textContent = `寫入 data/${id}.json…`;
+      const data = { ...result.data, generated: new Date().toISOString(), sourceFile: fileObj.name };
+      await put(`data/${id}.json`, JSON.stringify(data), id === roc ? `更新 ${roc} 年統計資料（網站上傳）` : `新增 ${id} 年地圖（網站上傳，與 ${roc} 年並存）`);
+      log.textContent = '更新年度清單…';
+      const years = [...list.filter(v => String(v) !== String(id)), id].sort((a, b) => idYear(a) - idYear(b) || idSfx(a) - idSfx(b));
+      if (years.length !== list.length) await put('data/years.json', JSON.stringify({ years }), `加入 ${id} 年`);
       existing = years;
-      log.innerHTML = `<b style="color:#9be07a">發布完成。</b>GitHub 大約需要 1 分鐘更新網站，之後 <a href="./">回到地圖</a> 重新整理就會看到 ${roc} 年。`;
+      log.innerHTML = `<b style="color:#9be07a">發布完成（${id === roc ? (list.some(v => String(v) === String(roc)) ? `已覆蓋 ${roc} 年地圖` : `${roc} 年`) : `另存為 ${id}`}）。</b>GitHub 大約需要 1 分鐘更新網站，之後 <a href="./">回到地圖</a> 重新整理就會看到。`;
       $('#token').value = '';
     } catch (e) { log.textContent = '發布失敗：' + e.message; }
     $('#go').disabled = false;
   };
-  // 不用瀏覽器內建 confirm（某些環境會被擋），改用頁面上的二次確認
-  let armed = 0;
-  function confirmOverwrite(roc) {
-    if (Date.now() - armed < 8000) return true;
-    armed = Date.now(); $('#log').textContent = `${roc} 年資料已存在。8 秒內再按一次「發布」即確認覆蓋。`; return false;
+  /* 年度代號：115，或同一年的另一份地圖 115_1、115_2… */
+  function idYear(id) { return parseInt(id, 10); }
+  function idSfx(id) { const m = String(id).match(/_(\d+)$/); return m ? +m[1] : 0; }
+  function askDuplicate(roc, copyId) {
+    $('#dupTitle').textContent = `網站上已經有 ${roc} 年的地圖`;
+    $('#dupText').innerHTML = `要用這次上傳的檔案<b>覆蓋</b>舊的 ${roc} 年地圖（舊的無法復原），還是另存為新的一份 <code>${esc(copyId)}</code>，兩份並存？`;
+    $('#dupOver').textContent = `覆蓋舊的 ${roc} 年地圖`;
+    $('#dupCopy').textContent = `另存為 ${copyId}`;
+    $('#dupModal').hidden = false; $('#dupCopy').focus();
+    return new Promise(res => {
+      const done = v => { $('#dupModal').hidden = true; document.removeEventListener('keydown', onKey); res(v); };
+      const onKey = e => { if (e.key === 'Escape') done('cancel'); };
+      document.addEventListener('keydown', onKey);
+      $('#dupOver').onclick = () => done('over');
+      $('#dupCopy').onclick = () => done('copy');
+      $('#dupCancel').onclick = () => done('cancel');
+    });
   }
 }
 </script>
